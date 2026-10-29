@@ -64,6 +64,24 @@ STATES = {
     'automation.night': {'state': 'on', 'attributes': {'last_triggered': '2026-10-28T08:00:00+00:00'}},
     'timer.eggs': {'state': 'active', 'attributes': {'duration': '0:05:00', 'remaining': '0:04:32', 'finishes_at': '2026-10-28T12:04:32+00:00'}},
     'sensor.graph': {'state': '21.4', 'attributes': {'unit_of_measurement': '°C', 'device_class': 'temperature'}},
+    # The rest of the types, for the audit pages (a_*).
+    'alarm_control_panel.home': {'state': 'armed_home', 'attributes': {'supported_features': 63, 'code_format': 'number', 'code_arm_required': True}},
+    'alarm_control_panel.off': {'state': 'disarmed', 'attributes': {'supported_features': 63, 'code_format': 'number'}},
+    'binary_sensor.door': {'state': 'on', 'attributes': {'device_class': 'door'}},
+    'binary_sensor.motion': {'state': 'off', 'attributes': {'device_class': 'motion'}},
+    'input_boolean.guest': {'state': 'on', 'attributes': {}},
+    'input_number.volume': {'state': '40', 'attributes': {'min': 0, 'max': 100, 'step': 1, 'unit_of_measurement': '%'}},
+    'input_select.scene': {'state': 'Movie', 'attributes': {'options': ['Day', 'Movie', 'Night']}},
+    'button.reboot': {'state': '2026-10-28T07:00:00+00:00', 'attributes': {}},
+    'remote.tv': {'state': 'on', 'attributes': {'current_activity': 'Watch TV', 'activity_list': ['Watch TV', 'Music']}},
+    'person.tim': {'state': 'home', 'attributes': {}},
+    'person.away': {'state': 'not_home', 'attributes': {}},
+    'weather.home': {'state': 'partlycloudy', 'attributes': {'temperature': 18, 'humidity': 60, 'temperature_unit': '°C', 'wind_speed': 12,
+                                                             'wind_speed_unit': 'km/h', 'pressure': 1016, 'supported_features': 3}},
+    'sun.sun': {'state': 'above_horizon', 'attributes': {'next_rising': '2026-10-29T11:20:00+00:00', 'next_setting': '2026-10-28T22:05:00+00:00', 'elevation': 31}},
+    'calendar.home': {'state': 'on', 'attributes': {'message': 'Dentist', 'start_time': '2026-10-28 14:00:00', 'end_time': '2026-10-28 15:00:00'}},
+    'lock.open': {'state': 'unlocked', 'attributes': {}},
+    'vacuum.cleaning': {'state': 'cleaning', 'attributes': {'battery_level': 64, 'fan_speed': 'max', 'fan_speed_list': ['quiet', 'max'], 'supported_features': 30524}},
 }
 HISTORY = {'hours': 24, 'values': [17.8, 17.2, 16.9, 16.8, 17.4, 18.6, 19.9, 20.8, 21.6, 22.4, 23.1, 23.4,
                                    23.2, 22.9, 22.1, 21.4, 20.9, 20.6, 20.1, 19.8, 20.4, 21.0, 21.3, 21.4]}
@@ -139,6 +157,23 @@ PAGES = [
                  ('media_player.paused', 'Kitchen', '', {'controls': 'playback'}, 2, 0, 1, 2),
                  ('media_player.spotify', 'Office', '', {'controls': 'volume'}, 0, 2, 2, 1),
                  ('media_player.idle', 'Bedroom', '', {'controls': 'playback'}, 2, 2, 1, 1)]),
+    ('a_single', [('alarm_control_panel.home', 'Alarm', '', {}, 0, 0, 1, 1), ('binary_sensor.door', 'Front door', '', {}, 1, 0, 1, 1),
+                  ('binary_sensor.motion', 'Hallway', '', {}, 2, 0, 1, 1), ('input_boolean.guest', 'Guest mode', '', {}, 0, 1, 1, 1),
+                  ('button.reboot', 'Reboot', '', {}, 1, 1, 1, 1), ('remote.tv', 'TV', '', {}, 2, 1, 1, 1),
+                  ('person.tim', 'Tim', '', {}, 0, 2, 1, 1), ('weather.home', 'Weather', '', {}, 1, 2, 1, 1), ('sun.sun', 'Sun', '', {}, 2, 2, 1, 1)]),
+    ('a_watch', [('alarm_control_panel.off', 'Alarm', '', WATCH, 0, 0, 1, 1), ('binary_sensor.door', 'Front door', '', WATCH, 1, 0, 1, 1),
+                 ('person.away', 'Tim', '', WATCH, 2, 0, 1, 1), ('lock.open', 'Back door', '', WATCH, 0, 1, 1, 1),
+                 ('weather.home', 'Outside', '', WATCH, 1, 1, 1, 1), ('sun.sun', 'Sun', '', WATCH, 2, 1, 1, 1),
+                 ('input_select.scene', 'Scene', '', WATCH, 0, 2, 1, 1), ('timer.eggs', 'Eggs', '', WATCH, 1, 2, 1, 1),
+                 ('vacuum.cleaning', 'Robot', '', WATCH, 2, 2, 1, 1)]),
+    ('a_wide', [('alarm_control_panel.home', 'Alarm', '', {}, 0, 0, 2, 1), ('person.tim', 'Tim', '', {}, 2, 0, 1, 1),
+                ('weather.home', 'Weather', '', {}, 0, 1, 3, 1), ('calendar.home', 'Family', '', {}, 0, 2, 2, 1), ('remote.tv', 'TV', '', {'controls': 'toggle'}, 2, 2, 1, 1)]),
+    ('a_big', [('weather.home', 'Weather', '', {'display': 'forecast'}, 0, 0, 3, 2), ('sun.sun', 'Sun', '', {'display': 'sunpath'}, 0, 2, 3, 1)]),
+    ('a_big2', [('alarm_control_panel.home', 'Alarm', '', {}, 0, 0, 2, 2), ('lock.door', 'Front door', '', {}, 2, 0, 1, 2),
+                ('vacuum.cleaning', 'Robot', '', {'controls': 'buttons'}, 0, 2, 2, 1), ('input_number.volume', 'Volume', '', {'controls': 'slider'}, 2, 2, 1, 1)]),
+    ('a_screen', [('screen.clock', '', '', {'display': 'digital'}, 0, 0, 2, 1), ('screen.clock', '', '', {'display': 'analog'}, 2, 0, 1, 1),
+                  ('screen.clock', '', '', {'display': 'flip'}, 0, 1, 3, 1), ('screen.clock', '', '', {'display': 'dial'}, 0, 2, 1, 1),
+                  ('input_select.scene', 'Scene', '', {'controls': 'stepper'}, 1, 2, 2, 1)]),
     ('m_opts', [('media_player.spotify', 'Standard', '', {'controls': 'playback'}, 0, 0, 2, 2),
                 ('media_player.spotify', 'No line', '', {'controls': 'playback', 'display': 'cover', 'subtitle': 'none'}, 2, 0, 1, 2),
                 ('media_player.spotify', 'No keys', '', {'controls': 'none', 'display': 'cover'}, 0, 2, 2, 1),
@@ -192,9 +227,12 @@ class Study(run.Run):
             tiles = []
             for n, (state, name, icon, options, c, r, w, h) in enumerate(cells):
                 domain = state.split('.')[0]
-                entity = f'{domain}.{state.split(".")[1]}_p{page}_{n}'
-                states[entity] = STATES[state]
-                tiles.append({'id': f'a{page:03x}{n:012x}', 'content': {'kind': 'entity', 'entityId': entity},
+                # The screen's own cards (the clock) keep their own entity and have no state.
+                entity = state if domain == 'screen' else f'{domain}.{state.split(".")[1]}_p{page}_{n}'
+                if domain != 'screen':
+                    states[entity] = STATES[state]
+                content = {'kind': 'builtin', 'name': entity[7:]} if domain == 'screen' else {'kind': 'entity', 'entityId': entity}
+                tiles.append({'id': f'a{page:03x}{n:012x}', 'content': content,
                               'placement': {'row': r, 'column': c, 'columns': w, 'rows': h},
                               'appearance': {'label': name, 'presentation': page_layout.footprint_size(w, h, grid),
                                              **({'icon': icon} if icon in CHOSEN else {}),

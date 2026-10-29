@@ -42,7 +42,7 @@ inline void paint_blind(Card &c, const Blind &b, bool fresh_card) {
   const bool shut = b.state == "closed" || (std::isfinite(b.position) && b.position <= 0.5f);
   if (c.icon) {
     lv_label_set_text(c.icon, shut ? "\U000F1A2C" : tile_controls::glyph::SLATS);
-    lv_obj_set_style_text_color(c.icon, shut || b.unavailable ? theme::color(theme::MUTED) : lv_color_hex(cover_paint::ACCENT), 0);
+    lv_obj_set_style_text_color(c.icon, shut || b.unavailable ? theme::color(theme::MUTED) : lv_color_hex(cover_paint::accent()), 0);
   }
   if (c.slider && (fresh_card || (!c.dirty && !lv_obj_has_state(c.slider, LV_STATE_PRESSED)))) {
     // A closed cover shows its track alone, as a lamp that is off, until a finger moves it.
@@ -223,7 +223,7 @@ inline void blind_card(lv_obj_t *parent, int x, int y, int w, int h, const Blind
     c.slider = brightness_slider(c.box, inset, h - foot - track_h - 2, right - 2 * inset, track_h);
     // The lamp's slider in the cover's colours, its fill the share the cover is open (Home Assistant's cover-position).
     lv_obj_set_style_bg_color(c.slider, lv_color_hex(cover_paint::track()), LV_PART_MAIN);
-    lv_obj_set_style_bg_color(c.slider, lv_color_hex(cover_paint::ACCENT), LV_PART_INDICATOR);
+    lv_obj_set_style_bg_color(c.slider, lv_color_hex(cover_paint::accent()), LV_PART_INDICATOR);
     lv_obj_set_style_bg_opa(c.slider, LV_OPA_COVER, LV_PART_INDICATOR);
     lv_obj_set_style_bg_opa(c.slider, LV_OPA_COVER, LV_PART_KNOB);
     lv_obj_add_event_cb(c.slider, blind_slider_event, LV_EVENT_ALL, user);

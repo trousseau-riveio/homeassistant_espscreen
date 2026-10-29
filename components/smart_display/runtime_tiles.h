@@ -819,6 +819,21 @@ inline std::array<const lv_font_t *, 3> soft_name_faces() { return {soft_name_s,
 inline std::array<const lv_font_t *, 3> soft_state_faces() { return {soft_state_s, soft_state_m, soft_state_l}; }
 inline std::array<const lv_font_t *, 3> soft_value_faces() { return {soft_value_s, soft_value_m, soft_value_l}; }
 inline std::array<const lv_font_t *, 3> soft_icon_faces() { return {soft_outline_s, soft_outline_m, soft_outline_l}; }
+// Soft (local fork): a card the look's own layout draws (a thermostat with its modes, a blind with its slats, a player
+// over the whole page) still writes in Soft's faces, the one whose line is nearest the look's own; a board without them
+// (placeholders of 8 px) keeps the look's.
+inline const lv_font_t *soft_like(const lv_font_t *font, const std::array<const lv_font_t *, 3> &faces) {
+  if (!theme::soft || !font) return font;
+  const int want = lv_font_get_line_height(font);
+  const lv_font_t *best = nullptr;
+  int off = 1 << 30;
+  for (auto *face : faces) {
+    if (!face || lv_font_get_line_height(face) <= 12) continue;
+    const int d = std::abs(static_cast<int>(lv_font_get_line_height(face)) - want);
+    if (d < off) { off = d; best = face; }
+  }
+  return best ? best : font;
+}
 // The outline twin of a four-byte Material Design icon as UTF-8, or empty where there is none.
 inline std::string soft_outline(const char *utf8) {
   if (!utf8 || strlen(utf8) != 4) return {};
@@ -1607,7 +1622,7 @@ inline void draw(lv_event_t *e) {
   const float fade = std::min({1.0f, phase / 0.2f, (1.0f - phase) / 0.25f});
   lv_draw_rect_dsc_t d;
   lv_draw_rect_dsc_init(&d);
-  d.bg_color = lv_color_hex(cover_paint::ACCENT);
+  d.bg_color = lv_color_hex(cover_paint::accent());
   d.bg_opa = (lv_opa_t) std::lround(LV_OPA_80 * fade);
   d.radius = LV_RADIUS_CIRCLE;
   const int middle = lying ? (c.y1 + c.y2) / 2 : (c.x1 + c.x2) / 2;
@@ -2703,7 +2718,7 @@ inline void render_vacuum_detail(Tile &t,bool large,int width,int height,int pad
 // and close as a row of pill keys under them; the key of the direction the cover moves is filled. A slider
 // sends its value when the finger lifts, and shows it while it moves.
 // Home Assistant's purple for covers; the track and the slats are its tints (cover_paint.h).
-inline constexpr uint32_t COVER_ACCENT = cover_paint::ACCENT;
+inline uint32_t cover_accent(){return cover_paint::accent();}
 inline uint32_t cover_track(){return cover_paint::track();}
 inline lv_obj_t *cover_values[2]{};
 inline std::string alarm_card_line(const Tile &t);
@@ -2752,8 +2767,8 @@ inline lv_obj_t *cover_slider(lv_obj_t *parent,int x,int y,int w,int h,float val
   lv_obj_set_pos(slider,x,y);lv_obj_set_size(slider,w,h);lv_slider_set_orientation(slider,LV_SLIDER_ORIENTATION_VERTICAL);
   lv_obj_set_style_radius(slider,radius,LV_PART_MAIN);lv_obj_set_style_radius(slider,radius,LV_PART_INDICATOR);
   lv_obj_set_style_bg_color(slider,lv_color_hex(cover_track()),LV_PART_MAIN);lv_obj_set_style_bg_opa(slider,tilt?LV_OPA_TRANSP:LV_OPA_COVER,LV_PART_MAIN);
-  lv_obj_set_style_bg_color(slider,lv_color_hex(COVER_ACCENT),LV_PART_INDICATOR);lv_obj_set_style_bg_opa(slider,tilt?LV_OPA_TRANSP:LV_OPA_COVER,LV_PART_INDICATOR);
-  lv_obj_set_style_bg_color(slider,tilt?lv_color_hex(COVER_ACCENT):theme::color(theme::KNOB),LV_PART_KNOB);lv_obj_set_style_bg_opa(slider,LV_OPA_COVER,LV_PART_KNOB);
+  lv_obj_set_style_bg_color(slider,lv_color_hex(cover_accent()),LV_PART_INDICATOR);lv_obj_set_style_bg_opa(slider,tilt?LV_OPA_TRANSP:LV_OPA_COVER,LV_PART_INDICATOR);
+  lv_obj_set_style_bg_color(slider,tilt?lv_color_hex(cover_accent()):theme::color(theme::KNOB),LV_PART_KNOB);lv_obj_set_style_bg_opa(slider,LV_OPA_COVER,LV_PART_KNOB);
   lv_obj_set_style_radius(slider,LV_RADIUS_CIRCLE,LV_PART_KNOB);
   lv_obj_set_style_opa(slider,LV_OPA_50,LV_STATE_DISABLED);
   // LVGL centres the knob on the end of the fill in a square as wide as the slider; the pads shrink it to a
@@ -2797,7 +2812,7 @@ inline lv_obj_t *cover_bar(lv_obj_t *parent,int x,int y,int w,int h,float value,
     slider=lv_slider_create(parent);lv_obj_remove_style_all(slider);
     lv_obj_set_pos(slider,x,y);lv_obj_set_size(slider,w,h);lv_slider_set_orientation(slider,LV_SLIDER_ORIENTATION_HORIZONTAL);
     lv_obj_set_style_bg_color(slider,lv_color_hex(cover_track()),LV_PART_MAIN);lv_obj_set_style_bg_opa(slider,LV_OPA_COVER,LV_PART_MAIN);
-    lv_obj_set_style_bg_color(slider,lv_color_hex(COVER_ACCENT),LV_PART_INDICATOR);lv_obj_set_style_bg_opa(slider,LV_OPA_COVER,LV_PART_INDICATOR);
+    lv_obj_set_style_bg_color(slider,lv_color_hex(cover_accent()),LV_PART_INDICATOR);lv_obj_set_style_bg_opa(slider,LV_OPA_COVER,LV_PART_INDICATOR);
     lv_obj_set_style_opa(slider,LV_OPA_50,LV_STATE_DISABLED);
     lv_obj_set_style_radius(slider,2,LV_PART_KNOB);lv_obj_add_style(slider,theme::style(theme::Paint::knob),LV_PART_KNOB);
     lv_obj_set_style_bg_opa(slider,LV_OPA_COVER,LV_PART_KNOB);
@@ -2825,7 +2840,7 @@ inline void cover_key_paint(lv_obj_t *button,const Tile &t,const CardPart &part)
   for(unsigned i=0;i<n;++i)if(keys[i].command==part.arg)key=&keys[i];
   if(!key){n=tile_controls::cover_tilt_keys(t,keys);for(unsigned i=0;i<n;++i)if(keys[i].command==part.arg)key=&keys[i];}
   if(!key)return;
-  set_color(button,LV_STYLE_BG_COLOR,key->checked?lv_color_hex(COVER_ACCENT):theme::color(theme::CARD));
+  set_color(button,LV_STYLE_BG_COLOR,key->checked?lv_color_hex(cover_accent()):theme::color(theme::CARD));
   set_color(button,LV_STYLE_BG_COLOR,key->checked?lv_color_hex(theme::ha::PURPLE_PRESSED):theme::color(theme::KEY),LV_STATE_PRESSED);
   set_number(button,LV_STYLE_BORDER_WIDTH,key->checked?0:1);
   if(auto *glyph=lv_obj_get_child(button,0))set_color(glyph,LV_STYLE_TEXT_COLOR,theme::color(key->checked?theme::ON_ACCENT:theme::INK));
@@ -2981,7 +2996,7 @@ inline void render_cover_detail(Tile &t,bool large,int width,int height,int pad,
     const lv_font_t *icon_font=widgets[0].icon_font?widgets[0].icon_font:mini_icon_font;
     int halo=std::min(box_h-24,ui::px(large?120:72));
     auto *ring=detail_shape(detail_root,pad+(box_w-halo)/2,top+(box_h-halo)/2,halo,halo,cover_track(),halo/2);
-    if(icon_font)card_bind(detail_text(ring,icon_for(t),0,(halo-lv_font_get_line_height(icon_font))/2,halo,icon_font,LV_TEXT_ALIGN_CENTER,theme::foreground(COVER_ACCENT)),t,cover_icon_paint);
+    if(icon_font)card_bind(detail_text(ring,icon_for(t),0,(halo-lv_font_get_line_height(icon_font))/2,halo,icon_font,LV_TEXT_ALIGN_CENTER,theme::foreground(cover_accent())),t,cover_icon_paint);
   }
   // Beside the sliders the keys stand under each other, like the switch on the wall next to a blind; under
   // them they keep their rows. A card with tilt keys as well falls back to rows when a stack would not fit.
@@ -7573,6 +7588,8 @@ inline climate_tile::Metrics bar_metrics(const PanelMetrics &m,bool large){
 }
 inline void draw_mode_bar(Widgets &w,const Tile &t,lv_obj_t *parent,lv_obj_t *&track,lv_obj_t **segments,climate_tile::Rect bar,
                           int room,const climate_tile::Metrics &cm,bool large);
+inline const lv_font_t *card_title_font(const Widgets &w) { return soft_like(w.title_font, soft_name_faces()); }
+inline const lv_font_t *card_value_font(const Widgets &w) { return soft_like(w.value_font, soft_state_faces()); }
 inline PanelMetrics panel_metrics(bool large) {
   return large ? PanelMetrics{ui::px(60), ui::px(46), ui::px(14), ui::px(8), ui::px(196), ui::px(52), ui::px(140), ui::px(44), ui::px(76), ui::px(40), ui::px(22), ui::px(8), ui::px(4)} : PanelMetrics{ui::px(40), ui::px(34), ui::px(9), ui::px(4), ui::px(128), ui::px(36), ui::px(90), ui::px(30), ui::px(48), ui::px(26), ui::px(14), ui::px(6), ui::px(6)};
 }
@@ -7605,7 +7622,8 @@ inline void control_event(lv_event_t *e);
 // A pill key: rounded, pressed darker, checked in the accent, disabled faded.
 inline lv_obj_t *panel_key(Widgets &w,unsigned n,lv_obj_t *parent,const PanelMetrics &m,int width,int height,bool transparent) {
   auto *key=panel_obj(parent,true);lv_obj_set_size(key,width,height);
-  lv_obj_set_style_radius(key,transparent?LV_RADIUS_CIRCLE:m.radius,0);
+  // A panel's keys are rounded squares; Soft's (local fork) are round, as its media keys are.
+  lv_obj_set_style_radius(key,transparent||theme::soft?LV_RADIUS_CIRCLE:m.radius,0);
   lv_obj_set_style_bg_opa(key,transparent?LV_OPA_TRANSP:LV_OPA_COVER,0);
   lv_obj_set_style_bg_opa(key,LV_OPA_COVER,LV_STATE_PRESSED);
   lv_obj_set_style_bg_opa(key,LV_OPA_COVER,LV_STATE_CHECKED);
@@ -7900,8 +7918,9 @@ inline void style_panel(Widgets &w,const Tile &t,lv_color_t accent,lv_color_t te
   if(!w.panel || w.panel_mode.empty())return;
   const uint32_t surface=theme::surface(t.background);
   lv_color_t card=lv_color_hex(surface);
-  lv_color_t key_bg=lv_color_hex(theme::key_on(surface,236));
-  lv_color_t key_pressed=lv_color_hex(theme::key_on(surface,212));
+  // Soft (local fork): the palette's circle, a shade deeper under a finger.
+  lv_color_t key_bg=lv_color_hex(theme::soft?theme::soft_colors().circle:theme::key_on(surface,236));
+  lv_color_t key_pressed=lv_color_hex(theme::soft?theme::hex(theme::KEY_PRESSED):theme::key_on(surface,212));
   w.panel_accent=accent;w.panel_text=text;
   for(unsigned n=0;n<3;++n){
     auto *key=w.keys[n];if(!key)continue;
@@ -7910,6 +7929,7 @@ inline void style_panel(Widgets &w,const Tile &t,lv_color_t accent,lv_color_t te
       set_color(key,LV_STYLE_BG_COLOR,theme::color(theme::CARD));set_color(key,LV_STYLE_BG_COLOR,theme::color(theme::STEPPER_KEY_PRESSED),LV_STATE_PRESSED);
       continue;
     }
+    if(theme::soft&&!in_pill&&!w.knob)set_number(key,LV_STYLE_RADIUS,LV_RADIUS_CIRCLE);  // Soft's keys are round (local fork)
     set_color(key,LV_STYLE_BG_COLOR,in_pill?theme::color(theme::STEPPER_KEY):key_bg);
     set_color(key,LV_STYLE_BG_COLOR,in_pill?theme::color(theme::STEPPER_KEY_PRESSED):key_pressed,LV_STATE_PRESSED);
     set_color(key,LV_STYLE_BG_COLOR,w.key_args[n]=="off" && w.panel_mode=="mode"?theme::color(theme::OFF):accent,LV_STATE_CHECKED);
@@ -8204,7 +8224,8 @@ inline void mode_segment(lv_obj_t *&p,lv_obj_t *parent,unsigned code,climate_til
   const bool mode=k.command==tile_controls::HVAC_MODE;
   lv_obj_set_style_bg_opa(p,k.checked?LV_OPA_COVER:LV_OPA_TRANSP,0);
   // A humidifier's mode has no colour of its own in Home Assistant: the one it is in takes the humidifier's blue.
-  if(k.checked)set_color(p,LV_STYLE_BG_COLOR,lv_color_hex(theme::foreground(tile_controls::humidifier(t)?tile_controls::accent(t):tile_controls::mode_color(k.arg))));
+  // Soft (local fork): the mode it is in in the palette's accent, as every chosen key of the look.
+  if(k.checked)set_color(p,LV_STYLE_BG_COLOR,lv_color_hex(theme::soft?theme::soft_colors().knob:theme::foreground(tile_controls::humidifier(t)?tile_controls::accent(t):tile_controls::mode_color(k.arg))));
   set_color(p,LV_STYLE_BG_COLOR,theme::color(theme::KEY_PRESSED),LV_STATE_PRESSED);
   const auto ink=k.checked?theme::color(theme::ON_ACCENT):theme::color(mode?theme::SLATE:theme::MUTED);
   auto *icon=lv_obj_get_child(p,0),*word=lv_obj_get_child(p,1);
@@ -8312,7 +8333,7 @@ inline void render_cover_tile(Widgets &w,const Tile &t,const cover_tile::Layout 
     w.parts[part]=media_key(w.extra,w.parts[part],{r.x,r.y,r.w,r.h},glyph,icons,false,false,on,cover_tile_key_event,(void*)(uintptr_t)(slot*16+(part==13?15:part-4)));
     lv_obj_set_ext_click_area(w.parts[part],0);
     set_color(w.parts[part],LV_STYLE_BG_COLOR,lv_color_hex(cover_track()));
-    set_color(lv_obj_get_child(w.parts[part],0),LV_STYLE_TEXT_COLOR,lv_color_hex(COVER_ACCENT));
+    set_color(lv_obj_get_child(w.parts[part],0),LV_STYLE_TEXT_COLOR,lv_color_hex(cover_accent()));
   };
   for(int i=0;i<3;++i){
     const auto &g=l.groups[i];if(g.area.empty())continue;
@@ -8440,7 +8461,7 @@ inline bool render_favorite_card(Widgets &w,const Tile &t,int width,int height){
   // The name and its line at the bottom left, on the shade the app put in the picture.
   const int name_h=lv_font_get_line_height(w.title_font),line_h=lv_font_get_line_height(w.value_font),text_w=std::max(1,width-key-ui::px(large?8:4));
   set_hidden(w.title,false);set_hidden(w.value,false);
-  set_font(w.title,w.title_font);set_text_align(w.title,LV_TEXT_ALIGN_LEFT);set_text_align(w.value,LV_TEXT_ALIGN_LEFT);
+  set_font(w.title,card_title_font(w));set_text_align(w.title,LV_TEXT_ALIGN_LEFT);set_text_align(w.value,LV_TEXT_ALIGN_LEFT);
   lv_obj_set_pos(w.title,0,height-name_h-line_h);lv_obj_set_size(w.title,text_w,name_h);
   lv_obj_set_pos(w.value,0,height-line_h);lv_obj_set_size(w.value,text_w,line_h);
   return true;
@@ -8458,7 +8479,7 @@ inline bool render_camera_card(Widgets &w,const Tile &t,int width,int height){
   // picture is on its way.
   lv_obj_add_flag(w.circle,LV_OBJ_FLAG_HIDDEN);set_hidden(w.value,true);set_hidden(w.title,!t.overlay||(photo&&t.is_map()));
   const int name_h=lv_font_get_line_height(w.title_font);
-  set_font(w.title,w.title_font);set_text_align(w.title,LV_TEXT_ALIGN_LEFT);
+  set_font(w.title,card_title_font(w));set_text_align(w.title,LV_TEXT_ALIGN_LEFT);
   lv_obj_set_pos(w.title,0,height-name_h);lv_obj_set_size(w.title,width,name_h);
   return true;
 }
@@ -8536,9 +8557,9 @@ inline bool render_tall(Widgets &w,const Tile &t,bool selected,int width,int hei
       hide_panel(w);hide_extra(w);
       lv_obj_set_size(w.circle,action.icon.w,action.icon.h);lv_obj_set_pos(w.circle,action.icon.x,action.icon.y);
       set_font(w.icon,action.icon.w>=w.base_circle||!mini_icon_font?w.icon_font:mini_icon_font);center_icon(w.icon);
-      set_font(w.title,w.title_font);set_text_align(w.title,LV_TEXT_ALIGN_CENTER);
+      set_font(w.title,card_title_font(w));set_text_align(w.title,LV_TEXT_ALIGN_CENTER);
       lv_obj_set_pos(w.title,action.title.x,action.title.y);lv_obj_set_size(w.title,action.title.w,action.title.h);
-      set_font(w.value,w.value_font);set_text_align(w.value,LV_TEXT_ALIGN_CENTER);
+      set_font(w.value,card_value_font(w));set_text_align(w.value,LV_TEXT_ALIGN_CENTER);
       lv_obj_set_pos(w.value,action.state.x,action.state.y);lv_obj_set_size(w.value,action.state.w,std::max(1,action.state.h));
       set_hidden(w.value,action.state.empty());
       return true;
@@ -8570,9 +8591,9 @@ inline bool render_tall(Widgets &w,const Tile &t,bool selected,int width,int hei
   const int y=(l.header.h-lines)/2;
   lv_obj_set_size(w.circle,circle,circle);lv_obj_set_pos(w.circle,0,(l.header.h-circle)/2);
   set_font(w.icon,heading_font);center_icon(w.icon);
-  set_font(w.title,w.title_font);set_text_align(w.title,LV_TEXT_ALIGN_LEFT);
+  set_font(w.title,card_title_font(w));set_text_align(w.title,LV_TEXT_ALIGN_LEFT);
   lv_obj_set_pos(w.title,tx,y);lv_obj_set_size(w.title,tw,m.name_h);
-  set_font(w.value,w.value_font);set_text_align(w.value,LV_TEXT_ALIGN_LEFT);
+  set_font(w.value,card_value_font(w));set_text_align(w.value,LV_TEXT_ALIGN_LEFT);
   lv_obj_set_pos(w.value,tx,y+m.name_h);lv_obj_set_size(w.value,tw,m.state_h);set_hidden(w.value,!l.state);
   tile_picture_place(w,t,circle,0,(l.header.h-circle)/2);
   if(cover.fits&&beside){
@@ -8815,7 +8836,7 @@ inline void render_full(Widgets &w,const Tile &t,bool custom,bool clock,bool sun
     return;
   }
   // The head as on the double-width card: the circle at the left, name and state beside it.
-  set_font(w.title,w.title_font);set_text_align(w.title,LV_TEXT_ALIGN_LEFT);set_text_align(w.value,LV_TEXT_ALIGN_LEFT);
+  set_font(w.title,card_title_font(w));set_text_align(w.title,LV_TEXT_ALIGN_LEFT);set_text_align(w.value,LV_TEXT_ALIGN_LEFT);
   int title_h=lv_font_get_line_height(w.title_font);
   lv_obj_set_height(w.title,title_h);
   // The head is one cell of the look (ui::cell_height) less the card's padding, whatever grid the board has, and
@@ -9051,8 +9072,10 @@ inline void render_slot(size_t slot) {
   // A big value that stepped up to the setpoint's digits (the watch block below) keeps them until that block
   // decides again, so a card is not restyled twice a render.
   if(!(watch && setpoint_font && lv_obj_get_style_text_font(w.value,LV_PART_MAIN)==setpoint_font))
-    set_font(w.value,watch && watch_value_font ? watch_value_font : w.value_font);
+    set_font(w.value,watch && watch_value_font ? watch_value_font : soft_layout ? w.value_font : card_value_font(w));
   // Both text boxes are one line high; the sizes come from the styles, not from a layout pass.
+  // A card Soft does not lay out writes its name in Soft's face all the same (soft_like).
+  if(theme::soft && !soft_layout && !w.key)set_font(w.title,card_title_font(w));
   int title_height=lv_font_get_line_height(lv_obj_get_style_text_font(w.title,LV_PART_MAIN));
   int value_height=lv_font_get_line_height(lv_obj_get_style_text_font(w.value,LV_PART_MAIN));
   lv_obj_set_height(w.value,value_height);
@@ -9143,7 +9166,7 @@ inline void render_slot(size_t slot) {
   }else if(!custom && !watch && !mini && !graph && !with_panel && !w.wide && tile_height(w)>=2*ui::cell_height()){
     // A cell at least twice the look's height shows its icon above its name and state, like a full card does.
     lv_obj_add_flag(w.slider,LV_OBJ_FLAG_HIDDEN);hide_panel(w);hide_extra(w);lv_obj_add_flag(w.unit,LV_OBJ_FLAG_HIDDEN);
-    set_font(w.title,w.title_font);title_height=lv_font_get_line_height(w.title_font);lv_obj_set_height(w.title,title_height);
+    set_font(w.title,card_title_font(w));title_height=lv_font_get_line_height(card_title_font(w));lv_obj_set_height(w.title,title_height);
     const int circle=large_tile?std::min(content_w,content_h*45/100):std::min(content_w,content_h*40/100);
     const int gap=ui::px(large_tile?10:6),line_gap=ui::px(large_tile?2:1);
     const int block=circle+gap+title_height+line_gap+value_height;
@@ -9161,7 +9184,7 @@ inline void render_slot(size_t slot) {
     // narrow cell gives the name its whole width instead of the room beside the circle. The circle keeps the
     // board's icon size and shrinks only when the three would not fit the cell's height.
     lv_obj_add_flag(w.slider,LV_OBJ_FLAG_HIDDEN);hide_panel(w);hide_extra(w);lv_obj_add_flag(w.unit,LV_OBJ_FLAG_HIDDEN);
-    set_font(w.title,w.title_font);title_height=lv_font_get_line_height(w.title_font);lv_obj_set_height(w.title,title_height);
+    set_font(w.title,card_title_font(w));title_height=lv_font_get_line_height(card_title_font(w));lv_obj_set_height(w.title,title_height);
     const int gap=ui::px(large_tile?8:4)+(theme::glow?ui::px(2):0),line_gap=head_gap(large_tile);
     const int lines=title_height+(value.empty()?0:line_gap+value_height);
     // Glow has no circle: the icon's own box, as tall as its (bigger) font, is what stands over the name.
@@ -9182,7 +9205,7 @@ inline void render_slot(size_t slot) {
     lv_obj_add_flag(w.slider,LV_OBJ_FLAG_HIDDEN);hide_panel(w);
     // The hidden name back to the card's own font and alignment, so nothing of the card the slot showed before (a
     // centred tall card) stays on it for the next tile to inherit (firmware 0.3.2).
-    set_font(w.title,w.title_font);set_text_align(w.title,LV_TEXT_ALIGN_LEFT);set_text_align(w.value,LV_TEXT_ALIGN_LEFT);
+    set_font(w.title,card_title_font(w));set_text_align(w.title,LV_TEXT_ALIGN_LEFT);set_text_align(w.value,LV_TEXT_ALIGN_LEFT);
     lap(swipe_profile::GEOMETRY);
     if(bedside)render_bedside(w,t,content_w,content_h);
     else if(clock)render_clock(w,t,large_tile,content_w,content_h);
@@ -10380,7 +10403,7 @@ inline void key_shape(Widgets &w,bool key){
     const int circle=w.base_circle>0?w.base_circle:ui::px(ui::large()?54:36);
     lv_obj_set_size(w.circle,circle,circle);set_hidden(w.icon,false);
     if(w.icon_font)set_font(w.icon,w.icon_font);
-    if(w.value_font)set_font(w.value,w.value_font);
+    if(w.value_font)set_font(w.value,card_value_font(w));
     set_text_align(w.value,LV_TEXT_ALIGN_LEFT);
     w.key_size=0;
   }

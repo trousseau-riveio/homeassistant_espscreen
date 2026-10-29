@@ -295,9 +295,31 @@ inline constexpr uint8_t VISION_GLASS_OPA = 34, VISION_GLASS_LINE_OPA = 46, VISI
 inline constexpr uint32_t VISION_INK = 0xF2F3F5, VISION_MUTED = 0xA9AFB7, VISION_ICON_OFF = 0xD4D8DD, VISION_LIT_MUTED = 0xE6E3DC;
 // The Dark mode setting as it was asked for; `dark` is what is drawn, and Vision is always dark (set_vision).
 inline bool dark_wanted = false;
+inline uint32_t mix(uint32_t first, uint32_t second, uint8_t amount);
+// Soft (local fork): what cards and their controls are made of in the palette's colours, so a control the look's own
+// code paints (a card's keys, a stepper, a thermostat's mode bar, a card that opens) is Soft's too: the card and its
+// line, the circle for keys and tracks, the ink and the muted words, and the accent for what is chosen.
+inline bool soft_role(Role role, uint32_t &out) {
+  const SoftPalette &p = soft_colors();
+  switch (role) {
+    case CARD: case RAISED: out = p.card; return true;
+    case LINE: case RAISED_LINE: out = p.line; return true;
+    case KEY: case TRACK: case BUTTON: case SETTING_KEY: out = p.circle; return true;
+    case KEY_PRESSED: case STEPPER_KEY_PRESSED: case SETTING_KEY_PRESSED: out = mix(p.ink, p.circle, 36); return true;
+    case STEPPER_KEY: out = p.card; return true;
+    case INK: out = p.ink; return true;
+    case MUTED: out = p.muted; return true;
+    case ACCENT: out = p.knob; return true;
+    case ACCENT_PRESSED: out = mix(p.ink, p.knob, 48); return true;
+    case ACCENT_TINT: out = mix(p.knob, p.card, 64); return true;
+    default: return false;
+  }
+}
 inline uint32_t hex(Role role) {
   if (role == PAGE && vision) return VISION_PAGE;
   if (role == PAGE && soft) return soft_colors().page;
+  uint32_t own = 0;
+  if (soft && soft_role(role, own)) return own;
   return dark ? ROLES[role].dark : ROLES[role].light;
 }
 

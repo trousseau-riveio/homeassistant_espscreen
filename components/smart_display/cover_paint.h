@@ -11,10 +11,11 @@
 #include "ui_scale.h"
 
 namespace cover_paint {
-// Home Assistant's purple for covers; the track and the slats are its tints.
-inline constexpr uint32_t ACCENT = theme::ha::PURPLE;
-inline uint32_t track() { return theme::tint(ACCENT, 37); }
-inline uint32_t slats() { return theme::tint(ACCENT, 80); }
+// Home Assistant's purple for covers; the track and the slats are its tints. Soft (local fork) takes its palette's
+// accent instead, as every control of the look.
+inline uint32_t accent() { return theme::soft ? theme::soft_colors().knob : theme::ha::PURPLE; }
+inline uint32_t track() { return theme::tint(accent(), 37); }
+inline uint32_t slats() { return theme::tint(accent(), 80); }
 
 // The slats behind a tilt slider's handle, at the angle the slider stands at: drawn by the slider itself just before its
 // handle (LV_EVENT_DRAW_MAIN_BEGIN), so they turn with every value it takes, a finger's or Home Assistant's, and cost no
@@ -62,7 +63,7 @@ inline lv_obj_t *tilt_bar(lv_obj_t *parent, int x, int y, int w, int h, float va
   lv_obj_set_style_bg_opa(slider, LV_OPA_TRANSP, LV_PART_MAIN);
   lv_obj_set_style_bg_opa(slider, LV_OPA_TRANSP, LV_PART_INDICATOR);
   lv_obj_set_style_opa(slider, LV_OPA_50, LV_STATE_DISABLED);
-  lv_obj_set_style_bg_color(slider, lv_color_hex(ACCENT), LV_PART_KNOB);
+  lv_obj_set_style_bg_color(slider, lv_color_hex(accent()), LV_PART_KNOB);
   lv_obj_set_style_bg_opa(slider, LV_OPA_COVER, LV_PART_KNOB);
   lv_obj_set_style_radius(slider, LV_RADIUS_CIRCLE, LV_PART_KNOB);
   // LVGL's knob is a square as high as the bar; the pads make it an upright handle.
