@@ -75,7 +75,7 @@ const card = props.card;
   <template v-else>
     <!-- As the screen draws it: the icon on the left, the name and the value beside it. A watch
          card puts the name on top and the big value under it; the small slider runs underneath. -->
-    <span class="head" :class="{ top: card.face.display === 'watch' }">
+    <span class="head" :class="{ top: card.face.display === 'watch', stacked: card.tile.options?.layout === 'stacked' && card.face.display !== 'watch' && !card.face.controls }">
       <span class="ic mdi" :class="{ lit: card.lit, thumb: card.face.display === 'live' || card.face.display === 'cover' }">{{ glyph(card.icon) }}</span>
       <span class="tx">
         <span class="nm">{{ card.texts.name }}</span>

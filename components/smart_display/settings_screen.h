@@ -35,6 +35,25 @@ inline int32_t swipe_pages = 0, rotation = 0, auto_home = 1, auto_home_seconds =
 // wherever it stands. On page 1 there is nowhere to go, so it is not drawn there and the page title starts at the
 // margin as it always did. Off, the bar is exactly what it was.
 inline int32_t home_button = 1;
+// The look of the tiles (local fork): 0 Classic, as it always was; 1 Glow, where a card that is on takes a soft wash of
+// its state colour and its corners are sharper (theme::glow); 2 Vision,
+// glass cards on a dark slate page after visionOS (theme::vision); 3 Soft, warm paper cards with a switch (theme::soft).
+inline int32_t theme = 0;
+// The top bar (local fork), in every look: off, the page title, the clock and the status icons go and the tiles take
+// their room (runtime_tiles::grid_chrome). Settings then open with a swipe down from the top edge.
+inline int32_t header = 1;
+// Vision's page (local fork): one of theme::VISION_GRADIENTS, the last of which is the owner's own top and bottom
+// colours below (0xRRGGBB), set from Home Assistant; -1 until they are, which draws the first gradient's.
+inline int32_t vision_bg = 0, vision_top = -1, vision_bottom = -1;
+// Vision's page gradients by name (theme::VISION_GRADIENTS), in the same order.
+inline constexpr const char *vision_bg_options[] = {"Slate", "Ocean", "Aurora", "Dusk", "Ember", "Forest", "Graphite", "Custom"};
+inline constexpr int32_t VISION_BG_COUNT = sizeof(vision_bg_options) / sizeof(vision_bg_options[0]);
+// Soft's colours (local fork): one of theme::SOFT_PALETTES, by name in the same order.
+inline int32_t soft_bg = 0;
+inline constexpr const char *soft_bg_options[] = {"Warm", "Sage", "Ocean", "Rose", "Lavender", "Sand", "Stone",
+                                                  "Warm Dark", "Sage Dark", "Ocean Dark", "Rose Dark", "Lavender Dark",
+                                                  "Sand Dark", "Graphite"};
+inline constexpr int32_t SOFT_BG_COUNT = sizeof(soft_bg_options) / sizeof(soft_bg_options[0]);
 // Whether this board's backlight takes levels (firmware 0.2.90+). The Waveshare's is one line on an I2C expander:
 // the panel is lit or it is not, and anything above a hair of a level lights it. A percentage there is a number
 // that lies, so the board's own file says so (BACKLIGHT_DIMMABLE) and the rows below follow: the normal brightness
@@ -192,7 +211,9 @@ inline SetResult set(const std::string &key, int32_t value) {
   const auto before = s;
   const int32_t before_swipe = swipe_pages, before_rotation = rotation, before_home = auto_home,
                 before_home_seconds = auto_home_seconds, before_dark = dark_mode, before_buttons = page_buttons,
-                before_home_button = home_button;
+                before_home_button = home_button, before_theme = theme, before_vision_bg = vision_bg,
+                before_vision_top = vision_top, before_vision_bottom = vision_bottom, before_header = header,
+                before_soft_bg = soft_bg;
   int32_t reported = 0;
   auto flag = [](int32_t v) -> int32_t { return v ? 1 : 0; };
   if (key == "standby_enabled") reported = s.standby_enabled = flag(value);
@@ -219,10 +240,18 @@ inline SetResult set(const std::string &key, int32_t value) {
   else if (key == "dark_mode") reported = dark_mode = flag(value);
   else if (key == "page_buttons") reported = page_buttons = flag(value);
   else if (key == "home_button") reported = home_button = flag(value);
+  else if (key == "theme") reported = theme = std::clamp<int32_t>(value, 0, 3);
+  else if (key == "header") reported = header = flag(value);
+  else if (key == "vision_bg") reported = vision_bg = std::clamp<int32_t>(value, 0, VISION_BG_COUNT - 1);
+  else if (key == "vision_top") reported = vision_top = std::clamp<int32_t>(value, 0, (1 << 24) - 1);
+  else if (key == "vision_bottom") reported = vision_bottom = std::clamp<int32_t>(value, 0, (1 << 24) - 1);
+  else if (key == "soft_bg") reported = soft_bg = std::clamp<int32_t>(value, 0, SOFT_BG_COUNT - 1);
   else return SetResult::unknown;
   if (s == before && swipe_pages == before_swipe && rotation == before_rotation && auto_home == before_home &&
       auto_home_seconds == before_home_seconds && dark_mode == before_dark && page_buttons == before_buttons &&
-      home_button == before_home_button)
+      home_button == before_home_button && theme == before_theme && vision_bg == before_vision_bg &&
+      vision_top == before_vision_top && vision_bottom == before_vision_bottom && header == before_header &&
+      soft_bg == before_soft_bg)
     return SetResult::same;
   changed(key.c_str(), reported);
   return SetResult::changed;
@@ -325,6 +354,8 @@ inline uint8_t fitting_rows(int span, int row_height, int gap, int pager, uint8_
 // ------------------------------------------------------------------ the pages
 inline constexpr const char *rotation_options[] = {"0°", "90°", "180°", "270°"};
 inline constexpr const char *half_turn_options[] = {"0°", "180°"};
+// The looks by their names, which stay the same in every language, as a theme's name does.
+inline constexpr const char *theme_options[] = {"Classic", "Glow", "Vision", "Soft"};
 
 // Brightness, the dark look for a screen beside a bed, and when the screen dims by itself.
 // Every reader says `-> int32_t` out loud: on the ESP32 that is `long`, and a lambda that returns a
@@ -354,6 +385,20 @@ inline constexpr Row light_rows[] = {
          [](int32_t value) { set("standby_brightness", value ? 100 : 0); },
          [] { return !dimmable && can_standby; },
          [] { return screen_settings::current.standby_enabled != 0; }),
+  // The look of the tiles (local fork): Classic, Glow or Vision.
+  choice(screen_text::txt::settings_theme, []() -> int32_t { return theme; },
+         [](int32_t value) { set("theme", value); }, theme_options, 4),
+  // The top bar, in every look (local fork).
+  toggle(screen_text::txt::settings_header, []() -> int32_t { return header; },
+         [](int32_t value) { set("header", value); }),
+  // Vision's page gradient, only while Vision is the look.
+  choice(screen_text::txt::settings_vision_bg, []() -> int32_t { return vision_bg; },
+         [](int32_t value) { set("vision_bg", value); }, vision_bg_options, VISION_BG_COUNT,
+         [] { return theme == 2; }),
+  // Soft's colours, only while Soft is the look.
+  choice(screen_text::txt::settings_soft_bg, []() -> int32_t { return soft_bg; },
+         [](int32_t value) { set("soft_bg", value); }, soft_bg_options, SOFT_BG_COUNT,
+         [] { return theme == 3; }),
 };
 
 // Darker between two times, so a panel in a hallway does not light up the bedroom.

@@ -718,6 +718,7 @@ std::string receive(const std::string &payload) {
     const int refresh = options["refresh"].is<int>() ? options["refresh"].as<int>() : 15;
     tile.refresh = refresh == 0 || (refresh >= 5 && refresh <= 3600) ? refresh : 15;
     tile.overlay = string(options["overlay"], 8) != "none";
+    tile.stacked = string(options["layout"], 8) == "stacked";
     tile.energy_lines = string(options["flow"], 8) == "lines";
     // A calendar card's choices (firmware 0.56.0+): its look, when an event "starts soon", its full screen's first view.
     tile.calendar_busy_free = string(options["style"], 12) == "busy_free";

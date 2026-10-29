@@ -65,7 +65,55 @@ int main() {
   assert(screen_settings::current.standby_brightness == 30);  // never above the normal brightness
   assert(screen_settings::current.valid());
   // Dark mode (firmware 0.2.54+) sits right under Brightness, a switch of its own outside the frozen block.
-  assert(light.count == 6 && light.rows[1].kind == Kind::toggle && std::string(label_text(light.rows[1])) == "Dark mode");
+  assert(light.count == 10 && light.rows[1].kind == Kind::toggle && std::string(label_text(light.rows[1])) == "Dark mode");
+  // Vision's page gradient (local fork): shown only while Vision is the look, clamped to the gradients there are.
+  {
+    const Row &page = row_named(light, "Vision background");
+    assert(page.kind == Kind::choice && page.option_count == VISION_BG_COUNT && !visible_row(page));
+    set("theme", 2);
+    assert(visible_row(page));
+    page.write(3);
+    assert(settings_screen::vision_bg == 3);
+    assert(set("vision_bg", 99) == SetResult::changed && settings_screen::vision_bg == VISION_BG_COUNT - 1);
+    assert(set("vision_top", 2000000) == SetResult::changed && settings_screen::vision_top == 2000000);
+    set("vision_bg", 0);
+    set("theme", 0);
+    assert(!visible_row(page));
+  }
+  // Soft's colours (local fork): shown only while Soft is the look, clamped to the palettes there are.
+  {
+    const Row &colours = row_named(light, "Soft colors");
+    assert(colours.kind == Kind::choice && colours.option_count == SOFT_BG_COUNT && !visible_row(colours));
+    set("theme", 3);
+    assert(visible_row(colours));
+    colours.write(2);
+    assert(settings_screen::soft_bg == 2);
+    assert(set("soft_bg", 99) == SetResult::changed && settings_screen::soft_bg == SOFT_BG_COUNT - 1);
+    set("soft_bg", 0);
+    set("theme", 0);
+    assert(!visible_row(colours));
+  }
+  // Theme (local fork), last in the group: Classic, Glow or Vision, through set() like every other setting.
+  {
+    const Row &look = row_named(light, "Theme");
+    assert(look.kind == Kind::choice && look.option_count == 4);
+    look.write(1);
+    assert(settings_screen::theme == 1);
+    look.write(2);
+    assert(settings_screen::theme == 2);
+    assert(set("theme", 7) == SetResult::changed && settings_screen::theme == 3);  // clamped to Soft, the last
+    look.write(0);
+    assert(settings_screen::theme == 0);
+  }
+  // Top bar (local fork): on until someone turns it off, in every look.
+  {
+    const Row &bar = row_named(light, "Top bar");
+    assert(bar.kind == Kind::toggle && settings_screen::header == 1 && value_text(bar) == "On");
+    bar.write(0);
+    assert(settings_screen::header == 0 && value_text(bar) == "Off");
+    assert(set("header", 0) == SetResult::same);
+    assert(set("header", 5) == SetResult::changed && settings_screen::header == 1);
+  }
   // A backlight without levels (firmware 0.2.90+): the normal brightness goes, and standby is the switch it really
   // is. Both write the same key, so the app and Home Assistant keep reading one number.
   {
@@ -176,7 +224,7 @@ int main() {
   assert(PAGE_COUNT == 5);
   for (uint8_t p = 0; p < PAGE_COUNT; ++p) {
     const Page &page = pages[p];
-    assert(page.title != NO_TEXT && *screen_text::tr(page.title) && page.count && page.count <= 8);
+    assert(page.title != NO_TEXT && *screen_text::tr(page.title) && page.count && page.count <= 12);  // draw()'s `shown`
     for (uint8_t i = 0; i < page.count; ++i) {
       const Row &row = page.rows[i];
       assert(row.label != NO_TEXT && *label_text(row));

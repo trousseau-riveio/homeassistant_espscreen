@@ -12,6 +12,13 @@ export const SETTING_GROUPS = [
     { key: "standby_enabled", kind: "toggle" },
     { key: "standby_seconds", kind: "duration", min: 60, max: 86400, needs: "standby_enabled" },
     { key: "standby_brightness", kind: "number", min: 0, max: 100, step: 5, unit: "%", needs: "standby_enabled", cap: "brightness" },
+    // The look of the tiles (local fork, settings_screen::theme): 0 Classic, 1 Glow, 2 Vision, 3 Soft.
+    { key: "theme", kind: "choice", options: [0, 1, 2, 3] },
+    // The top bar, in every look (local fork, settings_screen::header).
+    { key: "header", kind: "toggle" },
+    // Vision's page gradient (local fork): the screen's own, or Custom, the two colours set in Home Assistant.
+    { key: "vision_bg", kind: "choice", options: [0, 1, 2, 3, 4, 5, 6, 7], needs: "theme_vision" },
+    { key: "soft_bg", kind: "choice", options: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13], needs: "theme_soft" },
   ] },
   { group: "night", icon: "F0594", rows: [
     { key: "night_enabled", kind: "toggle" },
@@ -31,9 +38,13 @@ export const SETTING_GROUPS = [
 ] as const;
 export type SettingRow = (typeof SETTING_GROUPS)[number]["rows"][number] & { min?: number; max?: number; step?: number; unit?: string; needs?: string; cap?: string; options?: readonly unknown[] };
 export const settingLabel = (row: SettingRow) => t(`editor.screen_settings.rows.${row.key}`);
-// A choice in the same words in every language: the rotation's angle. The clock left this page for Settings → Language
-// & region, one choice for every screen (app 0.2.90).
-export const choiceText = (_row: SettingRow, value: unknown) => `${value}°`;
+// A choice in the same words in every language: the rotation's angle, and a theme's name. The clock left this page for
+// Settings → Language & region, one choice for every screen (app 0.2.90).
+export const THEME_NAMES = ["Classic", "Glow", "Vision", "Soft"] as const;
+export const VISION_BG_NAMES = ["Slate", "Ocean", "Aurora", "Dusk", "Ember", "Forest", "Graphite", "Custom"] as const;
+export const SOFT_BG_NAMES = ["Warm", "Sage", "Ocean", "Rose", "Lavender", "Sand", "Stone", "Warm Dark", "Sage Dark", "Ocean Dark", "Rose Dark", "Lavender Dark", "Sand Dark", "Graphite"] as const;
+const NAMED: Record<string, readonly string[]> = { theme: THEME_NAMES, vision_bg: VISION_BG_NAMES, soft_bg: SOFT_BG_NAMES };
+export const choiceText = (row: SettingRow, value: unknown) => NAMED[row.key] ? NAMED[row.key][Number(value)] ?? String(value) : `${value}°`;
 
 // The same steps as settings_screen.h: seconds low down, quarters of an hour up top; times by the quarter,
 // whole hours while held.

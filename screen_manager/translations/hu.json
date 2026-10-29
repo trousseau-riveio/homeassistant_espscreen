@@ -160,6 +160,10 @@
       "media_player": "Hangerő",
       "wake_when_moved": "Ébresztés mozgatásra",
       "dark_mode": "Sötét mód",
+      "theme": "Téma",
+      "header": "Felső sáv",
+      "vision_bg": "Vision háttér",
+      "soft_bg": "Soft színek",
       "auto_standby": "Auto készenlét",
       "standby_after": "Készenlét ennyi után",
       "standby_brightness": "Készenléti fényerő",
@@ -2662,6 +2666,11 @@
         "none": "Nincs vezérlő",
         "never": "Ne mutasd újra",
         "done": "Kész"
+      },
+      "layout": {
+        "label": "Elrendezés",
+        "row": "Ikon a szöveg mellett",
+        "stacked": "Ikon a szöveg felett"
       }
     },
     "precision": {
@@ -2801,6 +2810,10 @@
       "rows": {
         "brightness": "Fényerő",
         "dark_mode": "Sötét mód",
+        "theme": "Téma",
+        "header": "Felső sáv",
+        "vision_bg": "Vision háttér",
+        "soft_bg": "Soft színek",
         "standby_enabled": "Automatikus készenlét",
         "standby_seconds": "Készenlét ennyi után",
         "standby_brightness": "Készenléti fényerő",

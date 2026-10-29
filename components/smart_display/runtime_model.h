@@ -510,6 +510,8 @@ struct Tile {
   // On a 1x2 or 2x2 tile the picture fills the card (firmware 0.3.3+) with the name at the bottom; "overlay": "none"
   // leaves the picture alone. Fill or contain is the app's: it sends the picture cut the way the tile asks.
   bool overlay = true;
+  // A single card's icon over its name and state, all centred ("layout": "stacked"), instead of beside them.
+  bool stacked = false;
   // The energy card drawn calm: lines that grow with the power and an arrow on each, no running dots ("flow": "lines").
   bool energy_lines = false;
   // A calendar card's choices (firmware 0.56.0+): "Free or busy" words in its head, minutes that count as starting

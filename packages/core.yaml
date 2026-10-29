@@ -63,6 +63,7 @@ substitutions:
   CALIBRATION_PAINT_FILL: ""
   BOOT_CAMERA_HOOKS: ""                            # after the gesture: the camera images (features/camera.yaml)
   BOOT_CARDS_TAIL: ""                              # after the cards' hooks, before the settings page's
+  BOOT_THEMES: ""                                  # the looks' own faces (looks/shared/themes.yaml)
   # A board's extras on the settings page (docs/SETTINGS.md, "A board's own settings"): rows a feature or the board file
   # puts in settings_screen::board_rows. A screen without any has no Extras page.
   BOOT_AUDIO: ""                                   # features/audio.yaml: the speaker's bus, the microphone
@@ -157,6 +158,9 @@ esphome:
           // The screensaver (firmware 0.29.0+): a new word from ESP Screens in standby sets the level and the glass again.
           runtime_tiles::saver_changed = []() { id(apply_screen_settings).execute(); };
           runtime_tiles::mini_icon_font = id(materialdesign_icons_mini)->get_lv_font();
+          // The looks' own faces, where the look builds them (looks/shared/themes.yaml); a board without them keeps the
+          // card's own faces in every look.
+          ${BOOT_THEMES}
           // The top bar of every page a tap opens (detail_bar.h): its keys' glyphs and the page's name.
           detail_bar::icon_font = id(materialdesign_icons_mini)->get_lv_font();
           detail_bar::title_font = id(headline)->get_lv_font();
@@ -1453,6 +1457,7 @@ font:
     bpp: ${FONT_ICON_BPP}
     glyphs: *tile_icons
 
+
 # Make memory visible: this board has no PSRAM, so the free heap determines
 # how much UI still fits. Also shows up as an entity in Home Assistant.
 debug:
@@ -1640,6 +1645,45 @@ select:
       - lambda: |-
           const std::string option(x.c_str(), x.size());
           settings_screen::set("rotation", atoi(option.c_str()));
+  # The look of the tiles (settings_screen::theme): Classic as it always was; Glow tints a card that is on in its state
+  # colour and sharpens the corners (theme::glow); Vision draws glass cards on a dark page, after visionOS
+  # (theme::vision); Soft draws paper cards with a switch (theme::soft). runtime_tiles::theme_changed applies it.
+  - platform: template
+    id: setting_theme
+    name: "Theme"
+    icon: mdi:palette-outline
+    entity_category: config
+    options: ["Classic", "Glow", "Vision", "Soft"]
+    update_interval: never
+    lambda: 'return std::string(settings_screen::theme_options[std::clamp<int32_t>(settings_screen::theme, 0, 3)]);'
+    set_action:
+      - lambda: 'settings_screen::set("theme", x == "Soft" ? 3 : x == "Vision" ? 2 : x == "Glow" ? 1 : 0);'
+  # Vision's page gradient: one of the screen's own (theme::VISION_GRADIENTS) or Custom, the two colours below.
+  - platform: template
+    id: setting_vision_bg
+    name: "Vision background"
+    icon: mdi:gradient-vertical
+    entity_category: config
+    options: ["Slate", "Ocean", "Aurora", "Dusk", "Ember", "Forest", "Graphite", "Custom"]
+    update_interval: never
+    lambda: 'return std::string(settings_screen::vision_bg_options[std::clamp<int32_t>(settings_screen::vision_bg, 0, settings_screen::VISION_BG_COUNT - 1)]);'
+    set_action:
+      - lambda: |-
+          for (int32_t i = 0; i < settings_screen::VISION_BG_COUNT; ++i)
+            if (x == settings_screen::vision_bg_options[i]) settings_screen::set("vision_bg", i);
+  # Soft's colours: the page, its cards and their accent (theme::SOFT_PALETTES).
+  - platform: template
+    id: setting_soft_bg
+    name: "Soft colours"
+    icon: mdi:palette-outline
+    entity_category: config
+    options: ["Warm", "Sage", "Ocean", "Rose", "Lavender", "Sand", "Stone", "Warm Dark", "Sage Dark", "Ocean Dark", "Rose Dark", "Lavender Dark", "Sand Dark", "Graphite"]
+    update_interval: never
+    lambda: 'return std::string(settings_screen::soft_bg_options[std::clamp<int32_t>(settings_screen::soft_bg, 0, settings_screen::SOFT_BG_COUNT - 1)]);'
+    set_action:
+      - lambda: |-
+          for (int32_t i = 0; i < settings_screen::SOFT_BG_COUNT; ++i)
+            if (x == settings_screen::soft_bg_options[i]) settings_screen::set("soft_bg", i);
 
 # The touch panel the board names (`id: ts_touch`) turns with the display, through LVGL; these say how the
 # panel's own axes lie against the display's pixels.
@@ -1754,6 +1798,18 @@ switch:
       - lambda: 'settings_screen::set("home_button", 1);'
     turn_off_action:
       - lambda: 'settings_screen::set("home_button", 0);'
+  # The top bar, in every look; off, the tiles take its room (runtime_tiles::grid_chrome).
+  - platform: template
+    id: setting_header
+    name: "Top bar"
+    icon: mdi:page-layout-header
+    entity_category: config
+    restore_mode: DISABLED
+    lambda: return settings_screen::header != 0;
+    turn_on_action:
+      - lambda: 'settings_screen::set("header", 1);'
+    turn_off_action:
+      - lambda: 'settings_screen::set("header", 0);'
 
 # Night hours as Home Assistant times (firmware 0.2.49+); the screen keeps minutes since midnight.
 datetime:
@@ -2373,6 +2429,20 @@ script:
             const auto wanted = id(setting_rotation)->index_of(std::to_string(settings_screen::rotation) + "°");
             if (!id(setting_rotation)->has_state() || !shown.has_value() || !wanted.has_value() || *shown != *wanted) id(setting_rotation)->update();
           }
+          // The look and its colours follow too; the Top bar switch publishes its own change.
+          {
+            const auto look = id(setting_theme)->active_index();
+            if (!look.has_value() || static_cast<int32_t>(*look) != std::clamp<int32_t>(settings_screen::theme, 0, 3)) id(setting_theme)->update();
+            const auto page = id(setting_vision_bg)->active_index();
+            if (!page.has_value() || static_cast<int32_t>(*page) != settings_screen::vision_bg) id(setting_vision_bg)->update();
+            const auto colours = id(setting_soft_bg)->active_index();
+            if (!colours.has_value() || static_cast<int32_t>(*colours) != settings_screen::soft_bg) id(setting_soft_bg)->update();
+            char hex[8];
+            snprintf(hex, sizeof(hex), "#%06X", (unsigned) theme::vision_own(settings_screen::vision_top, true));
+            if (id(setting_vision_top)->state != hex) id(setting_vision_top)->update();
+            snprintf(hex, sizeof(hex), "#%06X", (unsigned) theme::vision_own(settings_screen::vision_bottom, false));
+            if (id(setting_vision_bottom)->state != hex) id(setting_vision_bottom)->update();
+          }
           // The Page buttons setting moves the cards into the bar's room or back (firmware 0.2.69+).
           if (runtime_tiles::enabled) runtime_tiles::page_buttons_changed();
           settings_screen::refresh();
@@ -2607,6 +2677,43 @@ text:
     id: dashboard_inbox
     name: "Tile settings"
     internal: ${DASHBOARD_INBOX_INTERNAL}
+  # Vision's own gradient, top and bottom, as #RRGGBB. Setting one chooses Custom, so the page shows it at once.
+  - platform: template
+    id: setting_vision_top
+    name: "Vision gradient top"
+    icon: mdi:format-color-fill
+    entity_category: config
+    mode: text
+    min_length: 7
+    max_length: 7
+    update_interval: never
+    lambda: |-
+      char hex[8]; snprintf(hex, sizeof(hex), "#%06X", (unsigned) theme::vision_own(settings_screen::vision_top, true));
+      return std::string(hex);
+    set_action:
+      - lambda: |-
+          if (x.size() == 7 && x[0] == '#') {
+            char *end = nullptr; const long rgb = strtol(x.c_str() + 1, &end, 16);
+            if (end && *end == 0) { settings_screen::set("vision_top", (int32_t) rgb); settings_screen::set("vision_bg", settings_screen::VISION_BG_COUNT - 1); }
+          }
+  - platform: template
+    id: setting_vision_bottom
+    name: "Vision gradient bottom"
+    icon: mdi:format-color-fill
+    entity_category: config
+    mode: text
+    min_length: 7
+    max_length: 7
+    update_interval: never
+    lambda: |-
+      char hex[8]; snprintf(hex, sizeof(hex), "#%06X", (unsigned) theme::vision_own(settings_screen::vision_bottom, false));
+      return std::string(hex);
+    set_action:
+      - lambda: |-
+          if (x.size() == 7 && x[0] == '#') {
+            char *end = nullptr; const long rgb = strtol(x.c_str() + 1, &end, 16);
+            if (end && *end == 0) { settings_screen::set("vision_bottom", (int32_t) rgb); settings_screen::set("vision_bg", settings_screen::VISION_BG_COUNT - 1); }
+          }
 
 button:
   # Wake and Sleep for Home Assistant automations (0.2.45+). Wake is light, not a tap (0.2.56+): it

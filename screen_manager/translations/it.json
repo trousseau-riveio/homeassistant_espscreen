@@ -160,6 +160,10 @@
       "media_player": "Volume",
       "wake_when_moved": "Riattiva se mosso",
       "dark_mode": "Modalità scura",
+      "theme": "Tema",
+      "header": "Barra superiore",
+      "vision_bg": "Sfondo Vision",
+      "soft_bg": "Colori Soft",
       "auto_standby": "Standby automatico",
       "standby_after": "Standby dopo",
       "standby_brightness": "Luminosità standby",
@@ -2662,6 +2666,11 @@
         "none": "Nessun controllo",
         "never": "Non mostrare più",
         "done": "Fatto"
+      },
+      "layout": {
+        "label": "Disposizione",
+        "row": "Icona accanto al testo",
+        "stacked": "Icona sopra il testo"
       }
     },
     "precision": {
@@ -2801,6 +2810,10 @@
       "rows": {
         "brightness": "Luminosità",
         "dark_mode": "Modalità scura",
+        "theme": "Tema",
+        "header": "Barra superiore",
+        "vision_bg": "Sfondo Vision",
+        "soft_bg": "Colori Soft",
         "standby_enabled": "Standby automatico",
         "standby_seconds": "Standby dopo",
         "standby_brightness": "Luminosità standby",

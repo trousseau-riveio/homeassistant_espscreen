@@ -59,11 +59,14 @@ ENTITY_IDS = {
     'swipe_pages': 'switch.office_1_swipe_between_pages', 'rotation': 'select.office_1_rotation',
     'dark_mode': 'switch.office_1_dark_mode', 'page_buttons': 'switch.office_1_page_buttons',
     'home_button': 'switch.office_1_show_home_button',
+    'theme': 'select.office_1_theme', 'header': 'switch.office_1_top_bar',
+    'vision_bg': 'select.office_1_vision_background', 'soft_bg': 'select.office_1_soft_colours',
 }
 STATES = {'brightness': '80.0', 'standby_enabled': 'on', 'standby_seconds': '600.0', 'standby_brightness': '20.0',
           'night_enabled': 'on', 'night_start': '22:30:00', 'night_end': '07:00:00', 'night_brightness': '5.0',
           'auto_home': 'on', 'auto_home_seconds': '120.0', 'home_on_standby': 'off',
-          'swipe_pages': 'on', 'rotation': '90°', 'dark_mode': 'off', 'page_buttons': 'on', 'home_button': 'on'}
+          'swipe_pages': 'on', 'rotation': '90°', 'dark_mode': 'off', 'page_buttons': 'on', 'home_button': 'on',
+          'theme': 'Soft', 'header': 'off', 'vision_bg': 'Ocean', 'soft_bg': 'Sage Dark'}
 
 
 def top_block(text, key):
@@ -190,6 +193,9 @@ class OwnedSettings(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(view['keys'], [key for key in SETTING_RULES if key not in ('show_clock', 'clock_24h')])
             self.assertEqual({key: view['values'][key] for key in ('brightness', 'night_start', 'rotation', 'home_on_standby')},
                              {'brightness': 80, 'night_start': 1350, 'rotation': 90, 'home_on_standby': False})
+            # The look and its colours by their names, as their selects say them (packages/core.yaml).
+            self.assertEqual({key: view['values'][key] for key in ('theme', 'header', 'vision_bg', 'soft_bg')},
+                             {'theme': 3, 'header': False, 'vision_bg': 1, 'soft_bg': 8})
             m.ha.states[ENTITY_IDS['night_end']] = {'state': 'unavailable'}
             view = m.settings_view(m.screen('text.screen'))
             self.assertEqual((view['unavailable'], view['values']['night_end']), (['night_end'], None), 'unknown, not a default')

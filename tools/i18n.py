@@ -185,6 +185,11 @@ EITHER_PLACEHOLDER = {'screen.date.top_bar': {'weekday', 'weekday_min', 'day', '
 # English that stays in the firmware on purpose, with why. Everything else a screen shows comes from the translations,
 # and `lint` fails on a new English text in the code, so it never slips back in.
 LINT_KEEP = {
+    # The looks and their colours (packages/core.yaml, the Theme, Vision background and Soft colours selects): the options of Home Assistant selects, whose
+    # values automations compare against, so they stay one word in every language, as the rotation's angles do.
+    'Classic', 'Glow', 'Vision', 'Soft', 'Slate', 'Ocean', 'Aurora', 'Dusk', 'Ember', 'Forest', 'Graphite', 'Custom',
+    'Warm', 'Sage', 'Rose', 'Lavender', 'Sand', 'Stone', 'Warm Dark', 'Sage Dark', 'Ocean Dark', 'Rose Dark',
+    'Lavender Dark', 'Sand Dark',
     # Statuses the app reads and acts on (screen_manager/app/server.py RESEND_STATES, the "Error" prefix): protocol.
     'Synced', 'Loading tiles', 'Layout received', 'Resend needed', 'Ready for tile configuration',
     'Use the Easy Setup profile', 'Swipe test started', 'Heap walked', 'Kept pages set', 'no answer', 'Error: message too large',

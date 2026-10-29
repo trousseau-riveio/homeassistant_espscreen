@@ -160,6 +160,10 @@
       "media_player": "Volume",
       "wake_when_moved": "Wakker bij bewegen",
       "dark_mode": "Donkere modus",
+      "theme": "Thema",
+      "header": "Bovenbalk",
+      "vision_bg": "Vision-achtergrond",
+      "soft_bg": "Soft-kleuren",
       "auto_standby": "Automatisch stand-by",
       "standby_after": "Stand-by na",
       "standby_brightness": "Helderheid stand-by",
@@ -2287,6 +2291,11 @@
         "none": "Geen bediening",
         "never": "Niet meer tonen",
         "done": "Klaar"
+      },
+      "layout": {
+        "label": "Indeling",
+        "row": "Pictogram naast tekst",
+        "stacked": "Pictogram boven tekst"
       }
     },
     "precision": {
@@ -2426,6 +2435,10 @@
       "rows": {
         "brightness": "Helderheid",
         "dark_mode": "Donkere modus",
+        "theme": "Thema",
+        "header": "Bovenbalk",
+        "vision_bg": "Vision-achtergrond",
+        "soft_bg": "Soft-kleuren",
         "standby_enabled": "Automatisch stand-by",
         "standby_seconds": "Stand-by na",
         "standby_brightness": "Helderheid stand-by",

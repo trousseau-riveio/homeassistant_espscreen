@@ -150,6 +150,11 @@ public:
   void on_status(void (*action)()) { status_action = action; }
   void on_item(void (*action)(size_t item)) { item_action = action; }
   void restyle() { for (auto &slot : header_slots) { slot.own = true; slot.icon_color = UINT32_MAX; } }
+  // The Top bar setting off (local fork): everything the bar drew and every tap of it goes, until draw() brings it back.
+  void hide(lv_obj_t *title, lv_obj_t *clock_anchor) {
+    for (auto *obj : {header_root, header_home_tap, status_tap, title, clock_anchor}) if (obj) set_visible(obj, false);
+    for (auto *tap : item_taps) if (tap) set_visible(tap, false);
+  }
   // Used only when a host renderer replaces its preview surface.
   void reset() {
     if (header_home_tap) lv_obj_delete(header_home_tap);
@@ -170,6 +175,9 @@ public:
 
     if (!room_label || !time_label || !header_text_font || !header_icon_font) return;
     set_visible(time_label, false);
+    // Back from the Glow look's hide(): the bar and the title stand again; draw() below decides each of its taps.
+    set_visible(room_label, true);
+    if (header_root) set_visible(header_root, true);
     auto *page = lv_obj_get_parent(room_label);
     if (!header_root) {
       header_root = lv_obj_create(page);

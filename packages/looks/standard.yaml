@@ -10,6 +10,8 @@
 # files of a screen fit together.
 packages:
   digits: !include shared/digits.yaml
+  # The looks' own faces (Glow, Vision, Soft): the compact look, a 4 MB board's, has no room for them.
+  themes: !include shared/themes.yaml
   grid: !include shared/grid.yaml
 
 substitutions:

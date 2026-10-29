@@ -209,6 +209,8 @@ WEATHER_WEEK = 'weather_week'
 BOOL_ATTRS = frozenset(['is_volume_muted', 'code_arm_required', 'assumed_state'])
 
 
+# How a single card stands its icon and its lines: beside them (the default) or over them, all centred.
+TILE_LAYOUTS = ('row', 'stacked')
 # The labels in English, as the Claude skill writes them; the editor gets them in its language (backgrounds()).
 TILE_BACKGROUNDS = {
     'auto': {'label': 'Default', 'color': None},
@@ -958,13 +960,21 @@ SETTING_RULES = {
     # The house at the far left of the top bar (firmware 0.2.100+), which takes the screen back to page 1. Page 1
     # draws none. Only a screen that owns its settings has it, like dark_mode.
     'home_button': (True, None, None),
+    # The look of the tiles (local fork): 0 Classic, 1 Glow, 2 Vision, 3 Soft (theme.h). Only a screen that owns its settings has it.
+    'theme': (0, 0, 3),
+    # The top bar, in every look (local fork); off, the tiles take its room. Only a screen that owns its settings has it.
+    'header': (True, None, None),
+    # Vision's page gradient (local fork): one of the screen's own, the last being the colours set in Home Assistant.
+    'vision_bg': (0, 0, 7),
+    # Soft's colours (local fork): one of the screen's palettes (theme::SOFT_PALETTES).
+    'soft_bg': (0, 0, 13),
 }
 # Firmware before 0.2.44 accepts a `settings` object with exactly its own eleven keys and refuses any
 # other size, so everything added after it travels as its own key in the layout message. Old firmware
 # ignores a key it does not know; a new screen with an old add-on keeps what it saved itself.
 # docs/SETTINGS.md walks through adding one.
 SETTINGS_BESIDE_BLOCK = ('swipe_pages', 'rotation', 'auto_home', 'auto_home_seconds', 'dark_mode', 'page_buttons',
-                         'home_button')
+                         'home_button', 'theme', 'header', 'vision_bg', 'soft_bg')
 
 # ----- The screen owns its settings (firmware 0.2.49+) -----
 # A screen offers every setting as an entity of its own device, and the settings page on the screen, Home
@@ -990,6 +1000,10 @@ SETTING_ENTITIES = {
     'dark_mode': ('switch', 'Dark mode'),
     'page_buttons': ('switch', 'Page buttons'),
     'home_button': ('switch', 'Show home button'),
+    'theme': ('select', 'Theme'),
+    'header': ('switch', 'Top bar'),
+    'vision_bg': ('select', 'Vision background'),
+    'soft_bg': ('select', 'Soft colours'),
 }
 # Entities firmware 0.2.49 added; one of them on a device means the screen owns its settings. The first five
 # existed before, so they cannot tell.
@@ -998,6 +1012,13 @@ SETTING_ENTITIES = {
 OWNED_SETTINGS_MARKERS = frozenset(('Night mode', 'Night starts', 'Night ends', '24-hour clock', 'Back to page 1',
                                     'Back to page 1 after', 'Back to page 1 on standby', 'Swipe between pages'))
 ROTATION_OPTIONS = ('0°', '90°', '180°', '270°')
+# The Theme entity's options (packages/core.yaml), in the order of the setting's values.
+THEME_OPTIONS = ('Classic', 'Glow', 'Vision', 'Soft')
+VISION_BG_OPTIONS = ('Slate', 'Ocean', 'Aurora', 'Dusk', 'Ember', 'Forest', 'Graphite', 'Custom')
+# A select setting whose options are names, by key; the rotation's are its angles.
+SOFT_BG_OPTIONS = ('Warm', 'Sage', 'Ocean', 'Rose', 'Lavender', 'Sand', 'Stone',
+                   'Warm Dark', 'Sage Dark', 'Ocean Dark', 'Rose Dark', 'Lavender Dark', 'Sand Dark', 'Graphite')
+NAMED_OPTIONS = {'theme': THEME_OPTIONS, 'vision_bg': VISION_BG_OPTIONS, 'soft_bg': SOFT_BG_OPTIONS}
 # Every board turns since this firmware; the Guition turned since 0.2.9.
 ROTATION_MIN_FIRMWARE = (0, 2, 80)
 # The screensaver (screen_saver.py): what the screen shows in standby instead of its dimmed tiles; its hello lists it.
@@ -1055,6 +1076,8 @@ def setting_from_state(key, state):
         if domain == 'time':
             hour, minute = (int(part) for part in value.split(':')[:2])
             return hour * 60 + minute if 0 <= hour < 24 and 0 <= minute < 60 else None
+        if key in NAMED_OPTIONS:
+            return NAMED_OPTIONS[key].index(value) if value in NAMED_OPTIONS[key] else None
         if domain == 'select':
             return int(value.rstrip('°')) if value in ROTATION_OPTIONS else None
     except ValueError:
@@ -1071,6 +1094,8 @@ def setting_action(key, entity, value):
         return 'number.set_value', {'entity_id': entity, 'value': value}
     if domain == 'time':
         return 'time.set_value', {'entity_id': entity, 'time': f'{value // 60:02d}:{value % 60:02d}:00'}
+    if key in NAMED_OPTIONS:
+        return 'select.select_option', {'entity_id': entity, 'option': NAMED_OPTIONS[key][value]}
     return 'select.select_option', {'entity_id': entity, 'option': f'{value}°'}
 
 
@@ -1360,7 +1385,7 @@ TILE_RESULT_EVENT = 'esp_screens_tile_result'
 # pastel background.
 TILE_EVENT_OPTIONS = {'size': 'size', 'controls': 'controls', 'display': 'display', 'icon': 'icon',
                       'color': 'background', 'background': 'background', 'tap': 'tap', 'inline': 'inline',
-                      'history_hours': 'history_hours', 'refresh': 'refresh', 'fit': 'fit', 'overlay': 'overlay',
+                      'history_hours': 'history_hours', 'refresh': 'refresh', 'fit': 'fit', 'overlay': 'overlay', 'layout': 'layout',
                       # Where a cover's slats stand open: 100 (Home Assistant's rule) or 50.
                       'tilt_open': 'tilt_open',
                       # How a map frames its people (app 0.4.33); who is on it is the editor's.
@@ -1944,7 +1969,7 @@ def validate_layout(data, stored=False, grid=DEFAULT_GRID):
             continue
         if 'options' in tile:
             options = tile['options']
-            if not isinstance(options, dict) or set(options) - {'tap', 'display', 'inline', 'history_hours', 'background', 'size', 'icon', 'controls', 'action', 'refresh', 'sub', 'fit', 'overlay', 'guard', 'tilt_open', 'flow', *MAP_OWN, *FAVORITE_OWN, *calendar_feed.KEYS, *meter.KEYS}:
+            if not isinstance(options, dict) or set(options) - {'tap', 'display', 'inline', 'history_hours', 'background', 'size', 'icon', 'controls', 'action', 'refresh', 'sub', 'fit', 'overlay', 'layout', 'guard', 'tilt_open', 'flow', *MAP_OWN, *FAVORITE_OWN, *calendar_feed.KEYS, *meter.KEYS}:
                 raise ValueError(t('addon.errors.layout.unknown_settings'))
             # A calendar card's choices (firmware 0.56.0): its calendars, its filters, its look; other tiles have none.
             if tile['entity'].startswith('calendar.'):
@@ -1966,6 +1991,12 @@ def validate_layout(data, stored=False, grid=DEFAULT_GRID):
                 options = {k: v for k, v in options.items() if k not in ('display', 'inline', 'controls', 'history_hours')}
             if 'background' in options and (not isinstance(options['background'],str) or options['background'] not in TILE_BACKGROUNDS):
                 raise ValueError(t('addon.errors.layout.background'))
+            # A single card's icon over its name and state (local fork); beside them, the default, is never stored.
+            if 'layout' in options:
+                if options['layout'] not in TILE_LAYOUTS:
+                    raise ValueError(t('addon.errors.layout.invalid_setting', setting='layout'))
+                if options['layout'] == TILE_LAYOUTS[0]:
+                    options = {k: v for k, v in options.items() if k != 'layout'}
             if 'icon' in options and not (options['icon'] == 'auto' or isinstance(options['icon'], str) and options['icon'] in tile_icons.ICONS):
                 raise ValueError(t('addon.errors.choose_icon'))
             domain = tile['entity'].split('.')[0]

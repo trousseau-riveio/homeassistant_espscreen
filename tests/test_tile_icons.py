@@ -29,9 +29,21 @@ class IconSetTests(unittest.TestCase):
             fonts = re.findall(r'materialdesignicons-webfont\.ttf["\']\n    id: (\w+)\n    size: \d+\n    bpp: [24]\n    glyphs: (.*)\n', text)
             # Back's font carries the chevron and nothing else, written out by hand in the shared core; every other icon
             # font carries the whole set. The home key is the Tessera mark (firmware 0.10.0+), a picture, not a glyph.
+            # The looks' icon fonts (settings_screen::theme): Glow's carries the whole set too; Soft's three carry the
+            # outline twins of the set (tools/soft_outlines.py, soft_icons.h), the icons Material Design draws so.
+            # The standard look carries them (looks/shared/themes.yaml); the compact look, the CYD's, has no room for them.
+            looks = [] if 'cyd' in name else ['materialdesign_icons_glow', 'soft_outline_icons', 'soft_outline_icons_mini',
+                                              'soft_outline_icons_big']
             self.assertEqual([font for font, _ in fonts], ['materialdesign_icons', 'materialdesign_icons_mini',
                                                            'materialdesign_icons_back', 'materialdesign_icons_status',
-                                                           'materialdesign_icons_big', 'watch_icon'], name)
+                                                           'materialdesign_icons_big', 'watch_icon', *looks], name)
+            outlines = {font: g.strip() for font, g in fonts if font.startswith('soft_outline_icons')}
+            self.assertEqual(outlines, {} if not looks else {'soft_outline_icons': '&soft_outlines',
+                                                             'soft_outline_icons_mini': '*soft_outlines',
+                                                             'soft_outline_icons_big': '*soft_outlines'}, name)
+            if looks:  # Glow's icon font carries the whole set, copied (tools/soft_outlines.py)
+                glow = text.split('id: materialdesign_icons_glow', 1)[1].split('\n\n', 1)[0]
+                self.assertEqual(re.findall(r'- "(\\U000F[0-9A-F]{4})"', glow), wanted, name)
             self.assertEqual(dict(fonts)['materialdesign_icons_back'].strip(), '["\\U000F0141"]', name)
             # The top bar's Wi-Fi bars (firmware 0.38.0): struck through, then one to four bars, the order header_bar.h counts;
             # then the battery's icons the tile icons lack (firmware 0.41.0, battery_status.h): charging per ten up to 90,
@@ -45,7 +57,8 @@ class IconSetTests(unittest.TestCase):
                 self.assertIn(code, tile_icons.GLYPHS.values(), code)
             self.assertTrue(fonts[0][1].startswith('&tile_icons ')
                             and all(g == '*tile_icons' for font, g in fonts[1:]
-                                    if font not in ('materialdesign_icons_big', 'materialdesign_icons_back', 'materialdesign_icons_status')), name)
+                                    if font not in ('materialdesign_icons_big', 'materialdesign_icons_back', 'materialdesign_icons_status')
+                                    and font not in outlines and font != 'materialdesign_icons_glow'), name)
             block = text.split('glyphs: &tile_icons ', 1)[1].split('\n\n', 1)[0]
             self.assertEqual(re.findall(r'- "(\\U000F[0-9A-F]{4})"', block), wanted, name)
             # The big font of the full-page card (firmware 0.2.62+) carries the subset the screen draws on its own.

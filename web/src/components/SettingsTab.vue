@@ -55,7 +55,9 @@ const flip = (row: SettingRow) => (asSwitch(row) ? (Number(values.value[row.key]
 // Page buttons and swiping off: the pages that only Go to page tiles could reach, and don't.
 const reachWarning = computed(() => pageReachWarning());
 const unavailable = (row: SettingRow) => offline.value || Boolean(view.value?.unavailable.includes(row.key));
-const needs = (row: SettingRow) => (row.needs ? Boolean(values.value[row.needs]) : true);
+// Vision's page gradient (local fork) only counts while Vision is the look; the other rows need a switch on.
+const needs = (row: SettingRow) =>
+  row.needs === "theme_vision" ? values.value.theme === 2 : row.needs === "theme_soft" ? values.value.theme === 3 : row.needs ? Boolean(values.value[row.needs]) : true;
 const status = computed(() => offline.value
   ? t("editor.screen_settings.status.offline")
   : settings.settingPending
@@ -119,6 +121,11 @@ const startCalibration = () => scr.currentScreen && scr.calibrateTouch(scr.curre
             <button v-if="isSwitch(row)" type="button" class="switch" :class="{ unknown: values[row.key] === null || values[row.key] === undefined }" role="switch"
               :id="`setting-${row.key}`" :aria-checked="Boolean(values[row.key]) ? 'true' : 'false'" :aria-labelledby="`setting-label-${row.key}`"
               :disabled="unavailable(row)" @click.stop="settings.setSetting(row.key, flip(row), 150)"></button>
+            <!-- A long list (Vision's backgrounds, local fork) is a dropdown: its buttons would run out of the card. -->
+            <select v-else-if="row.kind === 'choice' && optionsOf(row).length > 4" class="s-select" :id="`setting-${row.key}`" :aria-labelledby="`setting-label-${row.key}`"
+              :value="String(values[row.key])" :disabled="unavailable(row)" @change="settings.setSetting(row.key, Number(($event.target as HTMLSelectElement).value), 150)">
+              <option v-for="value in optionsOf(row)" :key="String(value)" :value="String(value)">{{ choiceText(row, value) }}</option>
+            </select>
             <div v-else-if="row.kind === 'choice'" class="seg" role="group" :aria-labelledby="`setting-label-${row.key}`">
               <button v-for="value in optionsOf(row)" :key="String(value)" type="button" :aria-pressed="values[row.key] === value ? 'true' : 'false'" :disabled="unavailable(row)" @click="settings.setSetting(row.key, value, 150)">{{ choiceText(row, value) }}</button>
             </div>

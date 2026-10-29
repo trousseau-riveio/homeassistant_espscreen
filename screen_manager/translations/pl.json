@@ -160,6 +160,10 @@
       "media_player": "Głośność",
       "wake_when_moved": "Wybudź przy ruchu",
       "dark_mode": "Tryb ciemny",
+      "theme": "Motyw",
+      "header": "Górny pasek",
+      "vision_bg": "Tło Vision",
+      "soft_bg": "Kolory Soft",
       "auto_standby": "Auto czuwanie",
       "standby_after": "Czuwanie po",
       "standby_brightness": "Jasność czuwania",
@@ -2662,6 +2666,11 @@
         "none": "Bez sterowania",
         "never": "Nie pokazuj ponownie",
         "done": "Gotowe"
+      },
+      "layout": {
+        "label": "Układ",
+        "row": "Ikona obok tekstu",
+        "stacked": "Ikona nad tekstem"
       }
     },
     "precision": {
@@ -2801,6 +2810,10 @@
       "rows": {
         "brightness": "Jasność",
         "dark_mode": "Tryb ciemny",
+        "theme": "Motyw",
+        "header": "Górny pasek",
+        "vision_bg": "Tło Vision",
+        "soft_bg": "Kolory Soft",
         "standby_enabled": "Auto czuwanie",
         "standby_seconds": "Czuwanie po",
         "standby_brightness": "Jasność czuwania",

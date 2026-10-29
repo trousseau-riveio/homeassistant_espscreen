@@ -160,6 +160,10 @@
       "media_player": "Volume",
       "wake_when_moved": "Acordar ao mover",
       "dark_mode": "Modo escuro",
+      "theme": "Tema",
+      "header": "Barra superior",
+      "vision_bg": "Fundo do Vision",
+      "soft_bg": "Cores Soft",
       "auto_standby": "Espera automática",
       "standby_after": "Espera após",
       "standby_brightness": "Brilho em espera",
@@ -2662,6 +2666,11 @@
         "none": "Sem controlos",
         "never": "Não mostrar novamente",
         "done": "Concluído"
+      },
+      "layout": {
+        "label": "Disposição",
+        "row": "Ícone ao lado do texto",
+        "stacked": "Ícone acima do texto"
       }
     },
     "precision": {
@@ -2801,6 +2810,10 @@
       "rows": {
         "brightness": "Brilho",
         "dark_mode": "Modo escuro",
+        "theme": "Tema",
+        "header": "Barra superior",
+        "vision_bg": "Fundo do Vision",
+        "soft_bg": "Cores Soft",
         "standby_enabled": "Espera automática",
         "standby_seconds": "Espera após",
         "standby_brightness": "Brilho em espera",

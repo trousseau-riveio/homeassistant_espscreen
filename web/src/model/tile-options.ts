@@ -17,7 +17,7 @@ import { BUILTIN_CARDS, type BuiltinName } from "../types";
 import { PLUGIN_TILE, PLUGIN_TILE_OPTIONS } from "./plugins";
 import { canonicalMeter } from "./meter";
 
-const APPEARANCE = { display: "display", icon: "icon", background: "background", historyHours: "history_hours", refresh: "refresh", subtitle: "sub", fit: "fit", overlay: "overlay",
+const APPEARANCE = { display: "display", icon: "icon", background: "background", historyHours: "history_hours", refresh: "refresh", subtitle: "sub", fit: "fit", overlay: "overlay", layout: "layout",
   mapEntities: "map", mapFraming: "framing", mapDistance: "distance",
   mapFollow: "follow", mapMarkers: "markers", mapNames: "names", mapZones: "zones", mapStreets: "streets", mapLook: "look",
   energyFlow: "flow",
@@ -65,6 +65,8 @@ export function canonicalOptions(entity: string, options: TileOptions = {}, key 
     out.sub = words ? `text:${words}` : "none";
   }
   if (out.sub === "auto") delete out.sub;
+  // A single card beside its icon (the default) is never stored; only "stacked" is.
+  if (out.layout !== "stacked") delete out.layout;
   // Where a cover's slats stand open: Home Assistant's 100 is never stored, and no other tile has the choice.
   if (out.tilt_open !== undefined && (!entity.startsWith("cover.") || String(out.tilt_open) === "100")) delete out.tilt_open;
   // Perform action keeps its action; another tap choice leaves none behind.

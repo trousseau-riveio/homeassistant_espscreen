@@ -122,6 +122,11 @@ const refreshChoices = computed(() => offer("refresh", rules.refresh.filter((sec
 const history = computed(() => current("history_hours", 24) as number);
 const historyChoices = computed(() => offer("history_hours", [1, 6, 24].map((hours) => [hours, t("editor.tile.history.hours", hours)] as [number, string]), history.value));
 const size = computed(() => current("size", "single") as string);
+// A single card's head (local fork): the icon beside the name and state, or centred over them. Cards that draw
+// their own face (a picture, a meter, a calendar, the energy diagram, a big value) keep theirs.
+const layoutShown = computed(() => size.value === "single" && !pictureCard.value && !mapCard.value && !energyTile.value && !calendarCard.value &&
+  !meterCard.value && !favoriteCard.value && display.value !== "watch" && display.value !== "graph");
+const layoutChoices = computed(() => (["row", "stacked"] as const).map((value) => [value, t(`editor.tile.layout.${value}`)] as [string, string]));
 const controls = computed(() => tileControls(props.tile, panel.value, inlineControlKind(domain.value)));
 const primaryControl = computed(() => domain.value === 'cover' ? coverPrimary(controls.value) : controls.value);
 const tiltSelected = computed(() => domain.value === 'cover' && hasCoverTilt(controls.value));
@@ -293,6 +298,9 @@ const backgroundName = computed(() => inv.inventory.backgrounds?.[props.tile.opt
       </PropRow>
       <PropRow v-if="lookShown && pictureCard" :label="t('editor.tile.picture.overlay.label')" icon="format-title">
         <ChoiceField :choices="pictureChoices('overlay')" :value="current('overlay', 'name')" :tile="tile" preview-key="overlay" :aria-label="t('editor.tile.picture.overlay.label')" @pick="(v) => setTileOption(tile, 'overlay', v)" />
+      </PropRow>
+      <PropRow v-if="lookShown && layoutShown" :label="t('editor.tile.layout.label')" icon="page-layout-header">
+        <ChoiceField :choices="layoutChoices" :value="current('layout', 'row')" :aria-label="t('editor.tile.layout.label')" @pick="(v) => setTileOption(tile, 'layout', v)" />
       </PropRow>
       <PropRow v-if="lookShown && domain === 'sensor'" :label="t('editor.tile.history.label')" icon="clock-outline">
         <ChoiceField :choices="historyChoices" :value="history" :tile="tile" preview-key="history_hours" :aria-label="t('editor.tile.history.label')" @pick="(v) => setTileOption(tile, 'history_hours', Number(v))" />

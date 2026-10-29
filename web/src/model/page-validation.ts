@@ -96,7 +96,7 @@ export function validatePageShape(layout: PageLayout, plugins = false) {
     for (const tile of page.tiles) {
       fields(tile, ['id', 'content', 'placement', 'appearance', 'interaction', 'children'], ['id', 'content', 'placement', 'appearance', 'interaction']);
       fields(tile.placement, ['row', 'column', 'columns', 'rows']);
-      fields(tile.appearance, ['label', 'presentation', 'display', 'icon', 'background', 'historyHours', 'refresh', 'subtitle', 'fit', 'overlay',
+      fields(tile.appearance, ['label', 'presentation', 'display', 'icon', 'background', 'historyHours', 'refresh', 'subtitle', 'fit', 'overlay', 'layout',
         'mapEntities', 'mapFraming', 'mapDistance', 'mapFollow', 'mapMarkers', 'mapNames', 'mapZones', 'mapStreets', 'mapLook', 'energyFlow',
         ...CALENDAR_FIELDS, ...CALENDAR_MORE, ...METER_FIELDS], ['label']);
       fields(tile.interaction, ['tap', 'inline', 'controls', 'action', 'guard', 'play', 'speaker', 'shuffle', 'repeat', 'tilt_open'], []);
@@ -155,6 +155,8 @@ export function validateCardOptions(tile: PageTile, entityId: string, size: stri
   // Where a cover's slats stand open (core.validate_layout): Home Assistant's 100, the default, is never stored.
   if (i.tilt_open !== undefined && i.tilt_open === ofType(domain)?.tilt_open?.[0]) fail('normalization');
   if (a.icon !== undefined && !icon(a.icon)) fail();
+  // A single card's stacked head (local fork): only "stacked" is stored.
+  if (a.layout !== undefined && a.layout !== 'stacked') fail('normalization');
   if (rules.wideOnly.includes(a.display || '') && !isWideSize(size)) fail('normalization');
   if (tile.content.kind === 'navigation' && (size === 'full' || a.display !== undefined || i.inline !== undefined ||
       i.controls !== undefined || a.historyHours !== undefined)) fail('normalization');

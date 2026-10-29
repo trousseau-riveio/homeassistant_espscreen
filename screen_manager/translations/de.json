@@ -160,6 +160,10 @@
       "media_player": "Lautstärke",
       "wake_when_moved": "Bei Bewegung aufwecken",
       "dark_mode": "Dunkler Modus",
+      "theme": "Design",
+      "header": "Kopfleiste",
+      "vision_bg": "Vision-Hintergrund",
+      "soft_bg": "Soft-Farben",
       "auto_standby": "Auto-Standby",
       "standby_after": "Standby nach",
       "standby_brightness": "Helligkeit Standby",
@@ -2662,6 +2666,11 @@
         "none": "Keine Steuerung",
         "never": "Nicht mehr anzeigen",
         "done": "Fertig"
+      },
+      "layout": {
+        "label": "Anordnung",
+        "row": "Symbol neben Text",
+        "stacked": "Symbol über Text"
       }
     },
     "precision": {
@@ -2801,6 +2810,10 @@
       "rows": {
         "brightness": "Helligkeit",
         "dark_mode": "Dunkler Modus",
+        "theme": "Design",
+        "header": "Kopfleiste",
+        "vision_bg": "Vision-Hintergrund",
+        "soft_bg": "Soft-Farben",
         "standby_enabled": "Auto-Standby",
         "standby_seconds": "Standby nach",
         "standby_brightness": "Helligkeit Standby",

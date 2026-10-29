@@ -269,6 +269,9 @@
       "no_rooms": "No areas mapped",
       "no_rooms_how": "Map the robot's segments to areas in Home Assistant, in the vacuum's settings.",
       "routines_note": "Made in the robot's own app"
+    },
+    "settings": {
+      "soft_bg": "Soft colours"
     }
   },
   "editor": {
@@ -301,6 +304,11 @@
     },
     "plugins": {
       "changes": "What changed"
+    },
+    "screen_settings": {
+      "rows": {
+        "soft_bg": "Soft colours"
+      }
     }
   },
   "addon": {

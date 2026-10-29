@@ -39,6 +39,8 @@ class SettingsPage(unittest.TestCase):
         self.assertLessEqual(rows, set(SETTING_RULES), 'the screen writes a key ESP Screens would drop')
         handled = set(re.findall(r'key == "(\w+)"', SCREEN))
         self.assertLessEqual(rows, handled, 'a row writes a key set() does not handle')
+        # Vision's own two colours (local fork) are the screen's alone: Home Assistant's text entities set them.
+        handled -= {'vision_top', 'vision_bottom'}
         self.assertEqual(handled, set(SETTING_RULES) - {'show_clock'}, 'set() handles every setting the app knows')
 
     def test_the_frozen_settings_block_keeps_exactly_eleven_keys(self):

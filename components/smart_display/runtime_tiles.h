@@ -2,6 +2,7 @@
 #include <cmath>
 #include <cstring>
 #include "runtime_model.h"
+#include "soft_icons.h"
 #ifdef ESP_SCREEN_HOST
 #include "host_shims.h"
 #else
@@ -96,6 +97,15 @@ inline esphome::ESPPreferenceObject buttons_preference;
 inline esphome::ESPPreferenceObject swipe_preference;
 inline esphome::ESPPreferenceObject home_preference;
 inline esphome::ESPPreferenceObject dark_preference;
+// The look of the tiles (local fork): Classic or Glow, settings_screen::theme.
+inline esphome::ESPPreferenceObject theme_preference;
+// Vision's page gradient (local fork): which one, and the owner's own two colours.
+struct VisionPage { uint32_t preset = 0; int32_t top = -1, bottom = -1; };
+static_assert(settings_screen::VISION_BG_COUNT == theme::VISION_GRADIENT_COUNT, "a name for every gradient");
+inline esphome::ESPPreferenceObject vision_preference;
+inline esphome::ESPPreferenceObject header_preference;
+inline esphome::ESPPreferenceObject soft_bg_preference;  // Soft's colours (local fork)
+static_assert(settings_screen::SOFT_BG_COUNT == theme::SOFT_PALETTE_COUNT, "a name for every Soft palette");
 // The grid chosen for each way the glass hangs (firmware 0.53.0+, regrid), lying down first.
 struct GridChoice { uint8_t columns[2], rows[2]; };
 inline esphome::ESPPreferenceObject grid_preference;
@@ -445,7 +455,8 @@ inline void center_icon(lv_obj_t *icon){
     const auto reach=[&](const lv_font_glyph_dsc_t &d){return 4*((int)d.box_w*(int)d.box_w+(int)d.box_h*(int)d.box_h);};  // (2 x half-diagonal)^2
     const int limit=side*78/100;
     lv_font_glyph_dsc_t small;
-    if(side>0&&mini_icon_font&&font!=mini_icon_font&&reach(g)>4*limit*limit&&icon_ink(icon,mini_icon_font,small)){
+    // Glow (local fork) draws no circle: the icon only has to fit its square box, so it keeps its size.
+    if(!theme::bare()&&side>0&&mini_icon_font&&font!=mini_icon_font&&reach(g)>4*limit*limit&&icon_ink(icon,mini_icon_font,small)){
       lv_obj_set_style_text_font(icon,mini_icon_font,0);font=mini_icon_font;g=small;
     }
     const int top=(font->line_height-font->base_line)-(int)g.box_h-g.ofs_y;  // the ink's top in the label
@@ -512,6 +523,22 @@ inline void load_settings() {
   if(swipe_preference.load(&swipe_saved))swipe_pages=swipe_saved==1;
   uint32_t dark_saved=0;
   if(dark_preference.load(&dark_saved))settings_screen::dark_mode=dark_saved==1;
+  theme_preference = esphome::global_preferences->make_preference<uint32_t>(0x54484D31);
+  uint32_t theme_saved=0;
+  if(theme_preference.load(&theme_saved)&&theme_saved<=3)settings_screen::theme=(int32_t)theme_saved;
+  theme::glow=settings_screen::theme==1;theme::vision=settings_screen::theme==2;theme::soft=settings_screen::theme==3;
+  vision_preference = esphome::global_preferences->make_preference<VisionPage>(0x56534E31);
+  VisionPage vision_saved;
+  if(vision_preference.load(&vision_saved)&&vision_saved.preset<(uint32_t)theme::VISION_GRADIENT_COUNT&&vision_saved.top>=-1&&(vision_saved.top>>24)==0&&vision_saved.bottom>=-1&&(vision_saved.bottom>>24)==0){
+    settings_screen::vision_bg=(int32_t)vision_saved.preset;settings_screen::vision_top=vision_saved.top;settings_screen::vision_bottom=vision_saved.bottom;
+  }
+  header_preference = esphome::global_preferences->make_preference<uint32_t>(0x48445231);
+  uint32_t header_saved=1;
+  if(header_preference.load(&header_saved))settings_screen::header=header_saved!=0;
+  soft_bg_preference = esphome::global_preferences->make_preference<uint32_t>(0x53464231);
+  uint32_t soft_bg_saved=0;
+  if(soft_bg_preference.load(&soft_bg_saved)&&soft_bg_saved<(uint32_t)theme::SOFT_PALETTE_COUNT)settings_screen::soft_bg=(int32_t)soft_bg_saved;
+  theme::soft_palette=settings_screen::soft_bg;
   uint32_t buttons_saved=1;
   if(buttons_preference.load(&buttons_saved))page_buttons=buttons_saved!=0;
   HomeTimeout home;
@@ -544,6 +571,14 @@ inline void persist_settings() {
   home_preference.save(&home);
   uint32_t dark = settings_screen::dark_mode ? 1 : 0;
   dark_preference.save(&dark);
+  uint32_t look = (uint32_t) settings_screen::theme;
+  theme_preference.save(&look);
+  VisionPage vision_page{(uint32_t) settings_screen::vision_bg, settings_screen::vision_top, settings_screen::vision_bottom};
+  vision_preference.save(&vision_page);
+  uint32_t header = settings_screen::header ? 1 : 0;
+  header_preference.save(&header);
+  uint32_t soft_bg = (uint32_t) settings_screen::soft_bg;
+  soft_bg_preference.save(&soft_bg);
   uint32_t buttons = page_buttons ? 1 : 0;
   buttons_preference.save(&buttons);
   uint32_t turned = (uint32_t) rotation;
@@ -588,6 +623,10 @@ struct Widgets {
   // A thermostat's mode bar as its panel ("Mode", firmware 0.19.0): its segments, on the panel's track (pill).
   std::array<lv_obj_t *,climate_tile::SEGMENTS> segments{};
   lv_obj_t *pill{}, *pill_value{}, *knob{}, *control_slider{}; int knob_on=-1;
+  // Soft's switch (local fork): a pill with a knob at the bottom of a card that is on or off, drawn only, the tap is the card's.
+  lv_obj_t *soft_track{}, *soft_knob{};
+  // The card was last laid out by Soft: its own padding, letter spacing and slider place, given back when it is not.
+  bool soft_drawn=false, soft_watch=false;  // soft_watch: drawn as Soft's big value
   lv_color_t panel_accent{}, panel_text{};
   // Busy sheet: a translucent white cover with a small spinner while a command is under way.
   lv_obj_t *busy{}, *spinner{}; bool busy_drawn=false;
@@ -672,6 +711,9 @@ template <class F> inline void each_card(F f) {
 // card takes and how many it spans. The descriptors live as long as the grid does.
 inline lv_obj_t *tile_grid = nullptr;
 inline int grid_margin = 0, grid_base_height = 0;
+// Where the area starts under the top bar and how tall it is then (grid_bind): with the Top bar off, the area starts a
+// margin from the top edge, as it keeps from the sides, and grows by the bar's room (grid_chrome).
+inline int grid_top = -1, grid_classic_height = 0;
 inline std::array<int32_t, DIM_MAX + 1> grid_columns_dsc{};
 inline std::array<int32_t, DIM_MAX + 1> grid_rows_dsc{};
 // Bind the tile area and lay out its cells (firmware 0.2.92+: from the canvas, not from the board file). The
@@ -679,6 +721,7 @@ inline std::array<int32_t, DIM_MAX + 1> grid_rows_dsc{};
 // and from under the top bar down to where the page bar starts. A board states a margin, a gap and the height of
 // that bar, all of them a look and not an orientation, and no pixel here comes from a substitution.
 inline void grid_cells();
+inline void grid_chrome();
 inline void grid_bind(lv_obj_t *container, int margin, int page_bar_height) {
   tile_grid = container;
   grid_margin = margin;
@@ -697,7 +740,20 @@ inline void grid_bind(lv_obj_t *container, int margin, int page_bar_height) {
   lv_obj_update_layout(container);
   grid_base_height = canvas_h - lv_obj_get_y(container) - page_bar_height;
   lv_obj_set_height(container, grid_base_height);
+  grid_top = lv_obj_get_y(container);
+  grid_classic_height = grid_base_height;
+  grid_chrome();
   grid_cells();
+}
+// Whether the top bar is drawn (local fork): the Top bar setting, in every look.
+inline bool header_shown() { return settings_screen::header != 0; }
+// The tile area (local fork): under the top bar, or from a margin under the top edge when the bar is off.
+inline void grid_chrome() {
+  if (!tile_grid || grid_top < 0) return;
+  const int top = header_shown() ? grid_top : std::min(grid_top, grid_margin);
+  if (lv_obj_get_y(tile_grid) != top) lv_obj_set_y(tile_grid, top);
+  grid_base_height = grid_classic_height + (grid_top - top);
+  if (lv_obj_get_style_height(tile_grid, LV_PART_MAIN) != grid_base_height) lv_obj_set_height(tile_grid, grid_base_height);
 }
 // The tile area's columns and rows as free units, for the grid in use (grid_bind, regrid).
 inline void grid_cells() {
@@ -737,6 +793,90 @@ inline bool has_icon_glyph(uint32_t codepoint) {
   return false;
 }
 // Whether `font` draws the glyph a label's UTF-8 text starts with (a four-byte Material Design icon).
+inline bool font_has(const lv_font_t *font, const std::string &utf8);
+// The looks' own faces, set at boot from packages/core.yaml (on_boot), before any card is drawn. A board without room for
+// them (THEME_FONTS 0, a 4 MB board) gets placeholders of 8 px, which never fit a card and leave it the look's own.
+// Glow's icon: without a circle the icon itself is the mark, as large as the circle was (the tile icons at
+// TILE_ICON_SIZE); where `room` lacks its height or a newer icon is missing from it, the card's own icon font.
+inline const lv_font_t *glow_icon_face = nullptr;
+// Vision's name: the tile title's size in Roboto's medium face instead of its bold one.
+inline const lv_font_t *vision_name_face = nullptr;
+// Soft's faces: Figtree for the name and the state, small to large, its figures for a big value, and its outline icons.
+inline const lv_font_t *soft_name_s = nullptr, *soft_name_m = nullptr, *soft_name_l = nullptr;
+inline const lv_font_t *soft_state_s = nullptr, *soft_state_m = nullptr, *soft_state_l = nullptr;
+inline const lv_font_t *soft_value_s = nullptr, *soft_value_m = nullptr, *soft_value_l = nullptr;
+inline const lv_font_t *soft_outline_s = nullptr, *soft_outline_m = nullptr, *soft_outline_l = nullptr;
+inline std::array<const lv_font_t *, 3> soft_name_faces() { return {soft_name_s, soft_name_m, soft_name_l}; }
+inline std::array<const lv_font_t *, 3> soft_state_faces() { return {soft_state_s, soft_state_m, soft_state_l}; }
+inline std::array<const lv_font_t *, 3> soft_value_faces() { return {soft_value_s, soft_value_m, soft_value_l}; }
+inline std::array<const lv_font_t *, 3> soft_icon_faces() { return {soft_outline_s, soft_outline_m, soft_outline_l}; }
+// The outline twin of a four-byte Material Design icon as UTF-8, or empty where there is none.
+inline std::string soft_outline(const char *utf8) {
+  if (!utf8 || strlen(utf8) != 4) return {};
+  const auto *b = reinterpret_cast<const unsigned char *>(utf8);
+  const uint32_t cp = (uint32_t(b[0] & 7) << 18) | (uint32_t(b[1] & 0x3F) << 12) | (uint32_t(b[2] & 0x3F) << 6) | (b[3] & 0x3F);
+  const uint32_t out = soft_icons::outline_of(cp);
+  if (!out) return {};
+  return {char(0xF0 | (out >> 18)), char(0x80 | ((out >> 12) & 0x3F)), char(0x80 | ((out >> 6) & 0x3F)), char(0x80 | (out & 0x3F))};
+}
+inline void center_icon(lv_obj_t *icon);
+inline const lv_font_t *glow_icon_font(const Widgets &w, const Tile &t, int room);
+// Soft's circle at the left edge, `y` down: a big circle carries the large icon (TILE_ICON_SIZE, glow_icon_face), a small
+// one the card's own; and the icon in outline where Material Design Icons draws one, in the largest of Soft's outline
+// faces the circle holds. Where none does, the filled icon, which shrinks itself (center_icon).
+inline void soft_icon(Widgets &w, const Tile &t, int circle, int y, int x = 0) {
+  const lv_font_t *icon_face = circle >= ui::px(68) ? glow_icon_font(w, t, circle * 82 / 100) : w.icon_font;
+  const std::string outline = soft_outline(lv_label_get_text(w.icon));
+  const lv_font_t *outline_face = nullptr;
+  for (auto *face : soft_icon_faces())
+    if (face && static_cast<int>(lv_font_get_line_height(face)) <= circle * 82 / 100) outline_face = face;
+  if (!outline.empty() && outline_face) { icon_face = outline_face; label(w.icon, outline); }
+  if (lv_obj_get_style_text_font(w.icon, LV_PART_MAIN) != icon_face) set_font(w.icon, icon_face);
+  lv_obj_set_size(w.circle, circle, circle); lv_obj_set_pos(w.circle, x, y); set_hidden(w.circle, false);
+  center_icon(w.icon); tile_picture_place(w, t, circle, x, y);
+}
+// Whether a big value is all figures, which Soft's figure faces draw (soft_value_faces()); a word takes the name's face.
+inline bool soft_figures(const std::string &text) {
+  for (size_t i = 0; i < text.size(); ++i) {
+    const unsigned char c = text[i];
+    if (std::isdigit(c) || std::strchr(".,-+:/ ", c)) continue;
+    if (c == 0xC2 && i + 1 < text.size() && static_cast<unsigned char>(text[i + 1]) == 0xB0) { ++i; continue; }  // °
+    return false;
+  }
+  return !text.empty();
+}
+// Whether a card shows Soft's switch: the domains a tap turns on and off (toggle_tap).
+inline bool soft_switched(const Tile &t) {
+  const auto d = t.domain();
+  return d == "light" || d == "switch" || d == "input_boolean" || d == "fan" || d == "automation" || d == "remote";
+}
+// Soft's switch, built the first time a card needs it and hidden on every other card (render).
+inline void soft_switch(Widgets &w, bool on, int y, int width, int height, int x = 0) {
+  auto bare_child = [](lv_obj_t *parent) {
+    auto *o = lv_obj_create(parent);
+    lv_obj_remove_style_all(o);
+    lv_obj_remove_flag(o, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_remove_flag(o, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_radius(o, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_bg_opa(o, LV_OPA_COVER, 0);
+    return o;
+  };
+  if (!w.soft_track) { w.soft_track = bare_child(w.tile); w.soft_knob = bare_child(w.soft_track); }
+  lv_obj_remove_flag(w.soft_track, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_set_size(w.soft_track, width, height);
+  lv_obj_set_pos(w.soft_track, x, y);
+  lv_obj_set_style_bg_color(w.soft_track, lv_color_hex(theme::soft_colors().circle), 0);
+  const int inset = std::max(2, height / 16), knob = std::max(1, height - 2 * inset);
+  lv_obj_set_size(w.soft_knob, knob, knob);
+  lv_obj_set_pos(w.soft_knob, on ? width - knob - inset : inset, inset);
+  lv_obj_set_style_bg_color(w.soft_knob, lv_color_hex(on ? theme::soft_colors().knob : theme::soft_colors().dark ? theme::soft_colors().muted : theme::SOFT_KNOB_OFF), 0);
+  lv_obj_set_style_border_width(w.soft_knob, on ? 0 : 1, 0);
+  lv_obj_set_style_border_color(w.soft_knob, lv_color_hex(theme::soft_colors().line), 0);
+}
+inline const lv_font_t *glow_icon_font(const Widgets &w, const Tile &t, int room) {
+  if (glow_icon_face && lv_font_get_line_height(glow_icon_face) <= room && font_has(glow_icon_face, icon_for(t))) return glow_icon_face;
+  return w.icon_font;
+}
 inline bool font_has(const lv_font_t *font, const std::string &utf8) {
   if (!font || utf8.size() < 4) return false;
   const auto *b = reinterpret_cast<const unsigned char *>(utf8.data());
@@ -5656,11 +5796,37 @@ inline const char *weather_text(const std::string &condition) {
   if (condition == "exceptional") return tr(txt::ha_weather_exceptional);
   return condition.c_str();
 }
+// A chosen icon drawn closed and open (local fork): the two Material Design icons of one thing, shut and open.
+struct OpenTwin { const char *closed, *open; };
+inline constexpr OpenTwin OPEN_TWINS[] = {
+    {"\U000F00AC", "\U000F1011"},  // blinds, blinds-open
+    {"\U000F1A2C", "\U000F1A2B"},  // blinds-horizontal-closed, blinds-horizontal
+    {"\U000F1847", "\U000F1846"},  // curtains-closed, curtains
+    {"\U000F081B", "\U000F081C"},  // door-closed, door-open
+    {"\U000F06D9", "\U000F06DA"},  // garage, garage-open
+    {"\U000F0299", "\U000F116A"},  // gate, gate-open
+    {"\U000F033E", "\U000F033F"},  // lock, lock-open
+    {"\U000F1A6C", "\U000F1A6B"},  // roller-shade-closed, roller-shade
+    {"\U000F05AE", "\U000F05B1"},  // window-closed, window-open
+    {"\U000F111C", "\U000F111E"},  // window-shutter, window-shutter-open
+};
+// A chosen icon follows the state where it has an open twin (local fork): a garage door, a gate or a blind chosen in
+// the editor shows itself open while its cover, valve, lock, sensor or switch is (Tile::active). Home Assistant keeps a
+// chosen icon as it is; its own icons for these already change (tile_icons.py, ha_default_icon).
+inline const char *chosen_icon(const Tile &tile) {
+  const auto d = tile.domain();
+  if (d != "cover" && d != "valve" && d != "lock" && d != "binary_sensor" && d != "switch" && d != "input_boolean")
+    return tile.icon.c_str();
+  const bool open = tile.active();
+  for (const auto &twin : OPEN_TWINS)
+    if (tile.icon == twin.closed || tile.icon == twin.open) return open ? twin.open : twin.closed;
+  return tile.icon.c_str();
+}
 inline const char *icon_for(const Tile &tile) {
   // A lock that waits for its second tap shows the open lock, also over an icon Home Assistant or the tile chose: for
   // five seconds it says what the next tap does.
   if (tile.domain() == "lock" && lock_asking(tile, false, lock_panel::NONE)) return lock_panel::glyph::LOCK_OPEN;
-  if (!tile.icon.empty()) return tile.icon.c_str();
+  if (!tile.icon.empty()) return chosen_icon(tile);
   // A favourite shows the glyph of what it plays (a playlist, an album) where it has no picture (firmware 0.24.0+).
   if (tile.favorite() && !tile.extra().fav_glyph.empty()) return tile.extra().fav_glyph.c_str();
   auto d = tile.domain();
@@ -7284,19 +7450,32 @@ inline void render_forecast(Widgets &w,const Tile &t,bool large,int width,int he
   }
 }
 // Smoothed trend of the manager's 24 history samples with a soft fill beneath.
-inline void render_graph(Widgets &w,const Tile &t,bool large,int x,int y,int width,int height) {
-  begin_extra(w,"graph",x+width,y+height);
+// How far a graph reaches past its room into the card's padding, side by side (local fork): to the card's border.
+struct Bleed { int left=0, top=0, right=0, bottom=0; };
+// The card's padding on the sides a graph reaches (local fork), border included: the graph stops inside the border.
+inline Bleed graph_bleed(const Widgets &w,bool left,bool top,bool right,bool bottom){
+  auto space=[&](bool on,int32_t value){return on?std::max<int>(0,value):0;};
+  return {space(left,lv_obj_get_style_space_left(w.tile,LV_PART_MAIN)),space(top,lv_obj_get_style_space_top(w.tile,LV_PART_MAIN)),
+          space(right,lv_obj_get_style_space_right(w.tile,LV_PART_MAIN)),space(bottom,lv_obj_get_style_space_bottom(w.tile,LV_PART_MAIN))};
+}
+// The line runs through the room it is given, side to side of `out` as well; its area runs on under it to the bottom of
+// `out`. The card clips both at its round corners (clip_corner, set in render_slot).
+inline void render_graph(Widgets &w,const Tile &t,bool large,int x,int y,int width,int height,Bleed out={}) {
+  const int box_w=width+out.left+out.right,box_h=height+out.top+out.bottom;
+  begin_extra(w,"graph",box_w,box_h);lv_obj_set_pos(w.extra,x-out.left,y-out.top);
   float minimum=INFINITY,maximum=-INFINITY;for(float v:t.history)if(std::isfinite(v)){minimum=std::min(minimum,v);maximum=std::max(maximum,v);}
   lv_point_precise_t raw[24];unsigned n=0;int stroke=ui::px(large?3:2),top=stroke;
+  // The line rises at most three quarters of the graph's width: on a tall card the day stays a curve, not a spike.
+  const int band=std::max(stroke+top+2,std::min(height,box_w*3/4));
   for(unsigned i=0;i<t.history.size() && i<24;++i){
     if(!std::isfinite(t.history[i]))continue;
     float level=maximum>minimum?(t.history[i]-minimum)/(maximum-minimum):0.5f;
-    raw[n++]={(lv_value_precise_t)(stroke/2+i*(width-stroke-1)/23),(lv_value_precise_t)(height-stroke/2-1-level*(height-stroke-1-top))};
+    raw[n++]={(lv_value_precise_t)(stroke/2+i*(box_w-stroke-1)/23),(lv_value_precise_t)(out.top+height-stroke/2-1-level*(band-stroke-1-top))};
   }
-  if(n==1){raw[1]=raw[0];raw[1].x=(lv_value_precise_t)(width-1);n=2;}
-  unsigned count=smooth(raw,n,w.points,POINT_BUFFER,width,height);
-  part_line(w,0,w.points,count,stroke,x,y);
-  w.fill_points=w.points;w.fill_count=count;w.fill_x=x;w.fill_y=y;w.fill_base=height;w.fill_opa=theme::fill_opacity();
+  if(n==1){raw[1]=raw[0];raw[1].x=(lv_value_precise_t)(box_w-1);n=2;}
+  unsigned count=smooth(raw,n,w.points,POINT_BUFFER,box_w,box_h);
+  part_line(w,0,w.points,count,stroke,0,0);
+  w.fill_points=w.points;w.fill_count=count;w.fill_x=0;w.fill_y=0;w.fill_base=box_h;w.fill_opa=theme::fill_opacity();
 }
 // Sun path: horizon, an arc from sunrise to sunset and the sun at the current
 // position (or below the horizon at night). Wide cards only.
@@ -7467,7 +7646,8 @@ inline void stepper_keys(Widgets &w,int width,int height,const lv_font_t *text_f
 // `standing`: the height of a player's volume standing at the right of its card (volume_playback on a card wider than
 // high, render_tall draws it among the card's parts): the panel holds the keys alone; -1 the keys alone, without room
 // for the volume; 0 lays the volume over the keys.
-inline int layout_panel(Widgets &w,const Tile &t,bool large,int content_w,int content_h,int standing=0) {
+// `most` (local fork, Soft): the most a wide card's controls may fill, so a strip keeps room for its name.
+inline int layout_panel(Widgets &w,const Tile &t,bool large,int content_w,int content_h,int standing=0,int most=0) {
   std::string mode=tile_controls::panel_kind(t);
   // A full card that draws its setpoint and mode keys as rows (render_tall) takes the taller card's control sizes.
   const bool taller=t.row_span()>1 && (!w.full || tile_controls::climate_modes_selected(t));
@@ -7505,7 +7685,7 @@ inline int layout_panel(Widgets &w,const Tile &t,bool large,int content_w,int co
     m.slider_w=std::min(m.slider_w,std::max(ui::touch_min(),content_w-m.key_h-m.gap));
     m.toggle_w=std::min(m.toggle_w,content_w);
   }
-  const int fill=(w.full||taller)?m.pill_w:rest_content_width(w);
+  const int fill=(w.full||taller)?m.pill_w:most>0?std::min(rest_content_width(w),std::max(ui::touch_min(),most)):rest_content_width(w);
   // That room follows the card's width (GitHub #250): a slot that showed a card of another width builds its parts again,
   // as a taller card does when it is resized.
   if(!w.full&&!taller){
@@ -8458,13 +8638,14 @@ inline bool render_tall(Widgets &w,const Tile &t,bool selected,int width,int hei
     if(secondary)text(1,artist,small,{0,y+fh+gap/2,width,ah},LV_TEXT_ALIGN_LEFT);
   }else if((d=="climate"||d=="humidifier")&&std::isfinite(t.current)){
     const auto *font=watch_value_font&&lv_font_get_line_height(watch_value_font)<=body.h?watch_value_font:w.value_font;
-    text(0,tile_controls::reading_text(t,t.current),font,{0,body.y+std::max(0,(body.h-static_cast<int>(lv_font_get_line_height(font)))/2),width,body.h},LV_TEXT_ALIGN_CENTER);
+    text(0,tile_controls::reading_text(t,t.current),font,{0,body.y+std::max(0,(body.h-static_cast<int>(lv_font_get_line_height(font)))/2),width,body.h},theme::vision?LV_TEXT_ALIGN_LEFT:LV_TEXT_ALIGN_CENTER);
   }else if(!t.builtin() && fresh() && t.available()){
     const std::string value=d=="light"?light_value_text(t):card_status(t,true);
     const lv_font_t *font=w.value_font;
     for(const auto *candidate:{watch_value_font,w.title_font,w.value_font})
       if(candidate&&face_covers(candidate,value)&&tall_tile::fits_text(body,text_width(value,candidate),lv_font_get_line_height(candidate))){font=candidate;break;}
-    if(text(0,value,font,{0,body.y+std::max(0,(body.h-static_cast<int>(lv_font_get_line_height(font)))/2),width,body.h},LV_TEXT_ALIGN_CENTER))
+    // Vision (local fork) keeps its words at the left, under its name, as visionOS does.
+    if(text(0,value,font,{0,body.y+std::max(0,(body.h-static_cast<int>(lv_font_get_line_height(font)))/2),width,body.h},theme::vision?LV_TEXT_ALIGN_LEFT:LV_TEXT_ALIGN_CENTER))
       drop_repeat(value);
   }
   return true;
@@ -8594,7 +8775,7 @@ inline void render_full(Widgets &w,const Tile &t,bool custom,bool clock,bool sun
   lv_obj_add_flag(w.slider,LV_OBJ_FLAG_HIDDEN);
   if(graph){
     hide_panel(w);
-    render_graph(w,t,large,0,head_h+gap,content_w,std::max(8,content_h-head_h-gap));
+    render_graph(w,t,large,0,head_h+gap,content_w,std::max(8,content_h-head_h-gap),graph_bleed(w,true,false,true,true));
     return;
   }
   // Direct controls at the bottom, centred; the room between shows what the double-width card had no room for.
@@ -8633,6 +8814,13 @@ inline std::string key_value(const Tile &t){
   if(t.unit=="%")return screen_text::percent((int)std::lround(number));
   return text;
 }
+// Soft's card (local fork, soft_card.cpp): what render_slot worked out of the tile before the layout.
+struct SoftCard {
+  const std::string &value, &unit, &value_short, &value_tail, &d;
+  bool with_panel, mini, large_tile, watch, graph;
+  int content_w, content_h;
+};
+void soft_card(Widgets &w, const Tile &t, const SoftCard &c);
 inline void render_slot(size_t slot) {
   swipe_profile::SlotTimer slot_timer(slot);
   swipe_profile::Lap lap;
@@ -8762,6 +8950,20 @@ inline void render_slot(size_t slot) {
   // A plugin's tile (docs/PLUGINS.md) draws itself too, when this screen has its plugin; else it is a plain card.
   bool plugin=t.is_plugin() && plugin_host::known(t);
   bool custom=clock||forecast||sunpath||bedside||energy||plugin||calendar||meter;
+  // Soft (local fork) lays out every card but these; one it drew before that is now another kind gets the look's back.
+  const bool soft_layout=theme::soft && !custom && !(watch && tile_controls::thermostat(t)) && !w.key && !t.live() &&
+                         !(tile_controls::climate_modes_selected(t) && (t.row_span()>1 || w.full)) &&
+                         !tile_controls::cover_tilt_selected(t) && !(w.full && d=="media_player") &&
+                         !t.is_map() && !t.favorite();
+  if(w.soft_drawn && !soft_layout){
+    w.soft_drawn=w.soft_watch=false;
+    if(w.panel){end_panel(w);w.panel_mode.clear();}
+    for(auto prop:{LV_STYLE_PAD_TOP,LV_STYLE_PAD_BOTTOM,LV_STYLE_PAD_LEFT,LV_STYLE_PAD_RIGHT})lv_obj_remove_local_style_prop(w.tile,prop,LV_PART_MAIN);
+    for(auto *o:{w.title,w.value,w.unit})lv_obj_remove_local_style_prop(o,LV_STYLE_TEXT_LETTER_SPACE,LV_PART_MAIN);
+    lv_obj_align(w.slider,LV_ALIGN_BOTTOM_MID,0,0);
+    lv_obj_set_height(w.title,lv_font_get_line_height(lv_obj_get_style_text_font(w.title,LV_PART_MAIN)));
+    if(lv_obj_get_style_text_font(w.icon,LV_PART_MAIN)!=w.icon_font)set_font(w.icon,w.icon_font);  // Soft's outline face
+  }
   if(!large_tile)pad_vertical(w.tile,watch||custom||graph?2:4);
   // A big value that stepped up to the setpoint's digits (the watch block below) keeps them until that block
   // decides again, so a card is not restyled twice a render.
@@ -8777,6 +8979,7 @@ inline void render_slot(size_t slot) {
   set_busy(w,w.busy_drawn,large_tile);
   lap(swipe_profile::BUSY);
   for(auto *o:{w.title,w.value,w.circle,w.unit})set_hidden(o,custom);  // a big-value card on a short cell hides its circle again below
+  if(w.soft_track)set_hidden(w.soft_track,true);  // Soft's switch shows again only on a Soft card (local fork)
   if(!w.key)set_hidden(w.icon,plugin);  // a key that showed a value hid its icon; a plugin tile draws its own
   if(custom && w.picture)lv_obj_add_flag(w.picture,LV_OBJ_FLAG_HIDDEN);
   if(w.key){
@@ -8824,6 +9027,11 @@ inline void render_slot(size_t slot) {
   }else if(t.favorite()&&render_favorite_card(w,t,content_w,content_h)){
     label(w.value,value);
     lap(swipe_profile::GEOMETRY);
+  }else if(soft_layout){
+    // Soft's cards (local fork) are laid out in soft_card.cpp, a compilation unit of its own (the Xtensa literal range).
+    lap(swipe_profile::GEOMETRY);
+    soft_card(w,t,SoftCard{value,unit,value_short,value_tail,d,with_panel,mini,large_tile,watch,graph,content_w,content_h});
+    lap(swipe_profile::CUSTOM);
   }else if((taller||(w.full&&(tile_controls::cover_tilt_selected(t)||tile_controls::climate_modes_selected(t)))||
             (!w.full&&t.row_span()==1&&t.inline_control!="slider"&&cover_row_card(t)))&&!custom&&!watch&&!graph&&
      render_tall(w,t,with_panel,content_w,content_h)){
@@ -8831,6 +9039,23 @@ inline void render_slot(size_t slot) {
   }else if(w.full && !bedside){
     lap(swipe_profile::GEOMETRY);
     render_full(w,t,custom,clock,sunpath,graph,mini,with_panel,large_tile,value,unit,content_w,content_h);
+    lap(swipe_profile::CUSTOM);
+  }else if(theme::vision && !custom && !watch && !mini && !graph && !with_panel && !w.full){
+    // Vision (local fork), after visionOS: the icon at the top left with no circle, the name and the state at the bottom
+    // left, the name in a medium face rather than bold, on every size of card that has no control of its own.
+    lv_obj_add_flag(w.slider,LV_OBJ_FLAG_HIDDEN);hide_panel(w);hide_extra(w);lv_obj_add_flag(w.unit,LV_OBJ_FLAG_HIDDEN);
+    const lv_font_t *name_face=vision_name_face?vision_name_face:w.title_font;
+    set_font(w.title,name_face);title_height=lv_font_get_line_height(name_face);lv_obj_set_height(w.title,title_height);
+    const int line_gap=head_gap(large_tile);
+    const int box=std::max(1,std::min<int>(lv_font_get_line_height(w.icon_font),content_h-title_height-(value.empty()?0:line_gap+value_height)));
+    lv_obj_set_size(w.circle,box,box);lv_obj_set_pos(w.circle,0,0);
+    if(lv_obj_get_style_text_font(w.icon,LV_PART_MAIN)!=w.icon_font)set_font(w.icon,w.icon_font);
+    center_icon(w.icon);tile_picture_place(w,t,box,0,0);
+    set_text_align(w.title,LV_TEXT_ALIGN_LEFT);set_text_align(w.value,LV_TEXT_ALIGN_LEFT);
+    const int value_y=content_h-value_height,title_y=value.empty()?content_h-title_height:value_y-line_gap-title_height;
+    lv_obj_set_pos(w.title,0,std::max(box,title_y));lv_obj_set_width(w.title,content_w);
+    lv_obj_set_pos(w.value,0,std::max(box,value_y));lv_obj_set_width(w.value,content_w);
+    fit_value(w.value,value,value_short,value_tail,content_w);
     lap(swipe_profile::CUSTOM);
   }else if(!custom && !watch && !mini && !graph && !with_panel && !w.wide && tile_height(w)>=2*ui::cell_height()){
     // A cell at least twice the look's height shows its icon above its name and state, like a full card does.
@@ -8848,6 +9073,28 @@ inline void render_slot(size_t slot) {
     lv_obj_set_pos(w.value,0,top+circle+gap+title_height+line_gap);lv_obj_set_width(w.value,content_w);
     fit_value(w.value,value,value_short,value_tail,content_w);
     lap(swipe_profile::CUSTOM);
+  }else if(t.stacked && !custom && !watch && !mini && !graph && !with_panel && !w.wide && !w.full){
+    // A single card asked to stack ("layout": "stacked"): the icon over the name and the state, all centred, so a
+    // narrow cell gives the name its whole width instead of the room beside the circle. The circle keeps the
+    // board's icon size and shrinks only when the three would not fit the cell's height.
+    lv_obj_add_flag(w.slider,LV_OBJ_FLAG_HIDDEN);hide_panel(w);hide_extra(w);lv_obj_add_flag(w.unit,LV_OBJ_FLAG_HIDDEN);
+    set_font(w.title,w.title_font);title_height=lv_font_get_line_height(w.title_font);lv_obj_set_height(w.title,title_height);
+    const int gap=ui::px(large_tile?8:4)+(theme::glow?ui::px(2):0),line_gap=head_gap(large_tile);
+    const int lines=title_height+(value.empty()?0:line_gap+value_height);
+    // Glow has no circle: the icon's own box, as tall as its (bigger) font, is what stands over the name.
+    const lv_font_t *stack_icon=theme::glow?glow_icon_font(w,t,content_h-gap-lines):w.icon_font;
+    const int base=theme::glow?lv_font_get_line_height(stack_icon):w.base_circle>0?w.base_circle:ui::px(large_tile?54:36);
+    const int circle=std::max(1,std::min({base,content_w,content_h-gap-lines}));
+    const int top=std::max(0,(content_h-(circle+gap+lines))/2);
+    const int circle_x=(content_w-circle)/2;
+    lv_obj_set_size(w.circle,circle,circle);lv_obj_set_pos(w.circle,circle_x,top);
+    if(lv_obj_get_style_text_font(w.icon,LV_PART_MAIN)!=stack_icon){set_font(w.icon,stack_icon);}
+    center_icon(w.icon);tile_picture_place(w,t,circle,circle_x,top);
+    set_text_align(w.title,LV_TEXT_ALIGN_CENTER);set_text_align(w.value,LV_TEXT_ALIGN_CENTER);
+    lv_obj_set_pos(w.title,0,top+circle+gap);lv_obj_set_width(w.title,content_w);
+    lv_obj_set_pos(w.value,0,top+circle+gap+title_height+line_gap);lv_obj_set_width(w.value,content_w);
+    fit_value(w.value,value,value_short,value_tail,content_w);
+    lap(swipe_profile::CUSTOM);
   }else if(custom){
     lv_obj_add_flag(w.slider,LV_OBJ_FLAG_HIDDEN);hide_panel(w);
     // The hidden name back to the card's own font and alignment, so nothing of the card the slot showed before (a
@@ -8860,9 +9107,12 @@ inline void render_slot(size_t slot) {
     else render_forecast(w,t,large_tile,content_w,content_h);
     lap(swipe_profile::CUSTOM);
   }else{
-  // A single-width graph takes the slider strip; a wide graph takes the right half.
-  bool graph_strip=graph && !w.wide, graph_side=graph && w.wide;
-  int chart_w=graph_side?content_w*55/100:0;
+  // A graph stands under the head on a square or upright card and beside it on a card wider than it is tall (local
+  // fork; before, a double-width card put it beside the head whatever its height, so a 2 x 2 card had a thin column).
+  const int card_w=content_w+lv_obj_get_style_space_left(w.tile,LV_PART_MAIN)+lv_obj_get_style_space_right(w.tile,LV_PART_MAIN);
+  const int card_h=content_h+lv_obj_get_style_space_top(w.tile,LV_PART_MAIN)+lv_obj_get_style_space_bottom(w.tile,LV_PART_MAIN);
+  bool graph_side=graph && card_w*5>card_h*6, graph_strip=graph && !graph_side;
+  int chart_w=graph_side?content_w*45/100:0;
   lap(swipe_profile::GEOMETRY);
   int panel_w=with_panel && !graph?layout_panel(w,t,large_tile,content_w,content_h):0;
   if(!panel_w)hide_panel(w);
@@ -8908,10 +9158,13 @@ inline void render_slot(size_t slot) {
       text_y+title_height+line_gap+value_height-value_face->base_line+(ui::px(2))>header_height+(ui::px(large_tile?6:3)));
   if(one_line){text_height=title_height;text_y=std::max(0,(header_height-title_height)/2);}
   const lv_font_t *icon_font=watch && watch_icon_font ? watch_icon_font : (mini||graph_strip) && mini_icon_font ? mini_icon_font : w.icon_font;
-  if(lv_obj_get_style_text_font(w.icon,LV_PART_MAIN)!=icon_font)set_font(w.icon,icon_font);center_icon(w.icon);
   // The plain head (a single or double-width card, with or without a panel) stands by the one rule, head_row,
   // centred on the room it got on this grid. The watch and the strip cards place their smaller circle themselves.
   const bool plain=!watch && !(mini||graph_strip);
+  // Glow (local fork): no circle, so the icon grows to the big icon font where the head has its height, and its box
+  // is the font's height; the name and the state stand beside it, centred on it, by the same rule.
+  if(theme::glow && plain){icon_font=glow_icon_font(w,t,header_height);circle_size=lv_font_get_line_height(icon_font);}
+  if(lv_obj_get_style_text_font(w.icon,LV_PART_MAIN)!=icon_font)set_font(w.icon,icon_font);center_icon(w.icon);
   const HeadRow head=plain?head_row(w,large_tile,circle_size,header_height,title_height,value.empty()?0:value_height):HeadRow{};
   if(plain){circle_size=head.circle;lv_obj_set_size(w.circle,circle_size,circle_size);}
   int text_x=watch?0:plain?head.text_x:circle_size+(ui::px(large_tile?8:6));
@@ -9012,11 +9265,15 @@ inline void render_slot(size_t slot) {
   if(mini){lv_obj_remove_flag(w.slider,LV_OBJ_FLAG_HIDDEN);travel_look(w.slider,t,false,true);if(!lv_obj_has_state(w.slider,LV_STATE_PRESSED) && lv_slider_get_value(w.slider)!=slider_value(t))lv_slider_set_value(w.slider,slider_value(t),LV_ANIM_OFF);}
   else lv_obj_add_flag(w.slider,LV_OBJ_FLAG_HIDDEN);
   lap(swipe_profile::GEOMETRY);
-  if(graph_strip)render_graph(w,t,large_tile,0,content_h-slider_height,content_w,slider_height);
-  else if(graph_side)render_graph(w,t,large_tile,content_w-chart_w,0,chart_w,content_h);
+  if(graph_strip)render_graph(w,t,large_tile,0,content_h-slider_height,content_w,slider_height,graph_bleed(w,true,false,true,true));
+  else if(graph_side)render_graph(w,t,large_tile,content_w-chart_w,0,chart_w,content_h,graph_bleed(w,false,true,true,true));
   else hide_extra(w);
   lap(swipe_profile::CUSTOM);
   }
+  // A graph reaches the card's border (render_graph): the card clips what it draws at its round corners, in two layers
+  // of a corner's height (lv_refr.c), only while it shows one (local fork).
+  {const bool corners=w.extra && !lv_obj_has_flag(w.extra,LV_OBJ_FLAG_HIDDEN) && w.extra_mode=="graph";
+   if(lv_obj_get_style_clip_corner(w.tile,LV_PART_MAIN)!=corners)lv_obj_set_style_clip_corner(w.tile,corners,0);}
   // Home Assistant's rule (Tile::active): what it calls inactive is grey, such as an airco that is off, a closed
   // blind, a docked robot or a player in standby (firmware 0.2.71+). A built-in card has no state and keeps its colour.
   bool on = t.builtin() || (fresh() && t.active());
@@ -9042,27 +9299,53 @@ inline void render_slot(size_t slot) {
     accent=tile_controls::lamp_color(t.hue,t.saturation);
   uint32_t state_color=on?accent:theme::STATE_OFF;
   auto color=lv_color_hex(theme::state(state_color));
-  auto circle_color=lv_color_hex(available?theme::tint(state_color,38):theme::hex(theme::TRACK));
+  // The Glow look (local fork): a card that is on in Home Assistant's sense (Tile::active: a lamp that is lit, a lock
+  // that is open) takes a soft wash of its state colour over the whole card, as the "Rounded" Home Assistant theme does,
+  // and its icon's circle a stronger one so it still stands out. A card of its own colour, a bare one, a key, a picture
+  // and a built-in card keep theirs.
+  const bool glow_card=theme::glow && available && t.active() && !t.builtin() && !t.background && !t.transparent && !w.key &&
+                       !(palette_state&8) && !letterboxed(w);
+  // Vision (local fork): white glass over the page's gradient, glass of the state colour while the card is on.
+  const bool vision_card=theme::vision && !w.key && !t.background && !t.transparent && !(palette_state&8) && !letterboxed(w);
+  const bool vision_lit=vision_card && available && t.active() && !t.builtin();
+  // Soft (local fork): warm paper cards, a grey circle with a dark icon, the state green while the card is on.
+  const bool soft_card=theme::soft && !w.key && !t.background && !t.transparent && !(palette_state&8) && !letterboxed(w);
+  const uint32_t card_surface=soft_card?theme::soft_colors().card:vision_card?(vision_lit?theme::vision_lit(state_color):theme::VISION_GLASS):
+                              glow_card?theme::tint(state_color,46):theme::surface(t.background);
+  const bool soft_lit=soft_card && available && t.active() && !t.builtin();
+  // Soft keeps its grey circle on and off; a card that is on shows it in the icon, the orange of the switch's knob.
+  auto circle_color=lv_color_hex(soft_card?theme::soft_colors().circle:available?theme::tint(state_color,glow_card?96:38):theme::hex(theme::TRACK));
   // Very pale bulbs still need a visible icon: a touch darker on a light card, a touch lighter on a dark one.
-  auto icon_color=lv_color_hex(available?theme::icon(state_color):theme::hex(theme::OFF));
+  auto icon_color=lv_color_hex(soft_card?(soft_lit?theme::soft_colors().knob:available?theme::soft_colors().ink:theme::soft_colors().muted):vision_card?theme::vision_icon(state_color,vision_lit):
+                               available?(theme::glow&&!w.key?theme::glow_icon(state_color):theme::icon(state_color)):theme::hex(theme::OFF));
   // Off: a grey track without fill or handle, as in Home Assistant.
-  const uint32_t fill=slider_on?accent:theme::STATE_OFF;
+  const uint32_t fill=slider_on?(theme::soft?theme::soft_colors().knob:accent):theme::STATE_OFF;
   auto fill_color=lv_color_hex(theme::state(fill));
   set_color(w.slider,LV_STYLE_BG_COLOR,fill_color,LV_PART_INDICATOR);
-  set_color(w.slider,LV_STYLE_BG_COLOR,lv_color_hex(theme::tint(fill,51)),LV_PART_MAIN);
+  set_color(w.slider,LV_STYLE_BG_COLOR,lv_color_hex(theme::soft?theme::soft_colors().circle:theme::tint(fill,51)),LV_PART_MAIN);
   slider_bar(w.slider,slider_bar_shown(t,slider_on));
   // Every card, the one over the whole page too, is white or its own pastel (firmware 0.2.77+): the state shows in the
   // icon and the controls, as on the other sizes. Firmware 0.2.62 to 0.2.76 tinted a full-page card in its state colour
   // while it was on.
-  press_ground(w.tile,letterboxed(w)?theme::color(theme::CAMERA_PAGE):lv_color_hex(theme::surface(t.background)));
+  press_ground(w.tile,letterboxed(w)?theme::color(theme::CAMERA_PAGE):lv_color_hex(card_surface));
   set_number(w.tile,LV_STYLE_BORDER_WIDTH,1);
   // "Background: none" hides only the card; geometry and padding stay identical, and the press still shows because
   // it lives on the PRESSED state: a shade of what the finger sees, the page there, the card everywhere else.
-  set_color(w.tile,LV_STYLE_BG_COLOR,lv_color_hex(theme::pressed(t.transparent ? theme::hex(theme::PAGE) : theme::surface(t.background))),LV_STATE_PRESSED);
-  set_number(w.tile,LV_STYLE_BG_OPA,t.transparent&&!letterboxed(w) ? LV_OPA_TRANSP : LV_OPA_COVER);
-  set_number(w.tile,LV_STYLE_BORDER_OPA,t.transparent ? LV_OPA_TRANSP : LV_OPA_COVER);
-  set_color(w.tile,LV_STYLE_BORDER_COLOR,lv_color_hex(theme::outline(t.background)));
+  set_color(w.tile,LV_STYLE_BG_COLOR,lv_color_hex(theme::pressed(t.transparent ? theme::hex(theme::PAGE) : card_surface)),LV_STATE_PRESSED);
+  set_number(w.tile,LV_STYLE_BG_OPA,vision_card?(vision_lit?theme::VISION_LIT_OPA:theme::VISION_GLASS_OPA):
+                                     t.transparent&&!letterboxed(w) ? LV_OPA_TRANSP : LV_OPA_COVER);
+  set_number(w.tile,LV_STYLE_BORDER_OPA,vision_card?(vision_lit?theme::VISION_LIT_LINE_OPA:theme::VISION_GLASS_LINE_OPA):
+                                         t.transparent ? LV_OPA_TRANSP : LV_OPA_COVER);
+  set_color(w.tile,LV_STYLE_BORDER_COLOR,lv_color_hex(soft_card?theme::soft_colors().line:vision_card?(vision_lit?theme::vision_lit_line(state_color):theme::VISION_GLASS):glow_card?theme::outline_of(card_surface):theme::outline(t.background)));
+  // Glow's sharper corner (theme::GLOW_RADIUS); Classic keeps the look's TILE_RADIUS from the card's style. A key is round.
+  if(!w.key){
+    if(theme::bare()||theme::soft)set_number(w.tile,LV_STYLE_RADIUS,ui::px(theme::soft?theme::SOFT_RADIUS:theme::vision?theme::VISION_RADIUS:theme::GLOW_RADIUS));
+    else lv_obj_remove_local_style_prop(w.tile,LV_STYLE_RADIUS,LV_PART_MAIN);
+  }
   set_color(w.circle,LV_STYLE_BG_COLOR,circle_color);
+  // Glow (local fork) draws no circle behind the icon; Classic keeps the circle's paint.
+  if(theme::bare()&&!w.key)set_number(w.circle,LV_STYLE_BG_OPA,LV_OPA_TRANSP);
+  else lv_obj_remove_local_style_prop(w.circle,LV_STYLE_BG_OPA,LV_PART_MAIN);
   set_color(w.icon,LV_STYLE_TEXT_COLOR,icon_color);
   // A key is its circle: the card takes the circle's colour and its press, with no border (firmware 0.8.0+).
   if(w.key){
@@ -9070,14 +9353,16 @@ inline void render_slot(size_t slot) {
     set_color(w.tile,LV_STYLE_BG_COLOR,lv_color_hex(theme::pressed(available?theme::tint(state_color,38):theme::hex(theme::TRACK))),LV_STATE_PRESSED);
     set_number(w.tile,LV_STYLE_BG_OPA,LV_OPA_COVER);set_number(w.tile,LV_STYLE_BORDER_OPA,LV_OPA_TRANSP);
   }
-  auto title_color=theme::color(theme::INK);
-  auto value_color=theme::color(w.key ? theme::INK : t.background ? theme::SLATE : theme::MUTED);
-  set_color(w.unit,LV_STYLE_TEXT_COLOR,theme::color(t.is_page()?theme::CHEVRON:theme::SLATE));
+  auto title_color=soft_card?lv_color_hex(theme::soft_colors().ink):vision_card?lv_color_hex(theme::VISION_INK):theme::color(theme::INK);
+  auto value_color=soft_card?lv_color_hex(w.soft_watch&&available?theme::soft_colors().ink:theme::soft_colors().muted):vision_card?lv_color_hex(vision_lit?theme::VISION_LIT_MUTED:theme::VISION_MUTED):
+                   theme::color(w.key ? theme::INK : t.background || glow_card ? theme::SLATE : theme::MUTED);
+  set_color(w.unit,LV_STYLE_TEXT_COLOR,soft_card?lv_color_hex(!w.soft_watch&&available&&t.active()&&!t.builtin()?theme::soft_colors().on:theme::soft_colors().muted):
+                                     theme::color(t.is_page()?theme::CHEVRON:theme::SLATE));
   set_color(w.title,LV_STYLE_TEXT_COLOR,title_color);
   set_color(w.value,LV_STYLE_TEXT_COLOR,value_color);
   // The controls take the state's colour even while the card is grey: a closed blind's position slider stays coloured
   // (Tile::slider_active), while the slider of something off turns grey and the Off mode key has a grey of its own.
-  style_panel(w,t,lv_color_hex(theme::state(accent)),title_color);
+  style_panel(w,t,lv_color_hex(soft_card?theme::soft_colors().knob:theme::state(accent)),title_color);
   style_tall(w,t);
   ring_favorite(w,t);
   // Custom parts follow the card palette: text like the title, lines/dots in the accent.
@@ -9699,6 +9984,8 @@ inline const header_bar::Bar *shown_bar() {
 }
 inline page_header::Renderer header_renderer;
 inline void draw_header(bool live) {
+  // The Top bar setting off (local fork): no bar; the tiles stand in its room (grid_chrome).
+  if (!header_shown()) { header_renderer.hide(room_label, time_label); return; }
   const int index = shown_page ? *shown_page : 0;
   const auto *record = model.configured && index >= 0 && static_cast<size_t>(index) < model.page_data.records.size()
                      ? &model.page_data.records[index] : nullptr;
@@ -9892,7 +10179,9 @@ inline bool check_tile_geometry() {
     if(w.panel && !lv_obj_has_flag(w.panel,LV_OBJ_FLAG_HIDDEN)){
       // Direct controls stay inside the card, right of the name and status, and inside their panel.
       lv_area_t panel;lv_obj_get_coords(w.panel,&panel);
-      bool inside=panel.x1>=content.x1 && panel.x2<=content.x2 && panel.y1>=content.y1 && panel.y2<=content.y2 && (custom || ((w.full||extended) ? value.y2<panel.y1 : title.x2<panel.x1 && value.x2<panel.x1));
+      // Soft (local fork) stands its keys under the words on a card and beside them on a strip.
+      const bool soft_under=w.soft_drawn && title.y2<panel.y1 && (lv_obj_has_flag(w.value,LV_OBJ_FLAG_HIDDEN) || value.y2<panel.y1);
+      bool inside=panel.x1>=content.x1 && panel.x2<=content.x2 && panel.y1>=content.y1 && panel.y2<=content.y2 && (custom || soft_under || ((w.full||extended) ? value.y2<panel.y1 : title.x2<panel.x1 && ((lv_obj_has_flag(w.value,LV_OBJ_FLAG_HIDDEN)&&w.soft_drawn) || value.x2<panel.x1)));
       for(uint32_t i=0;i<lv_obj_get_child_count(w.panel);++i){
         auto *child=lv_obj_get_child(w.panel,i);if(lv_obj_has_flag(child,LV_OBJ_FLAG_HIDDEN))continue;
         lv_area_t part;lv_obj_get_coords(child,&part);
@@ -9904,7 +10193,9 @@ inline bool check_tile_geometry() {
     if(w.extra && !lv_obj_has_flag(w.extra,LV_OBJ_FLAG_HIDDEN)){
       // Custom parts stay inside the card; a graph never runs into the text.
       lv_area_t extra;lv_obj_get_coords(w.extra,&extra);
-      const bool extra_inside=extra.x1>=content.x1 && extra.x2<=content.x2 && extra.y1>=content.y1 && extra.y2<=content.y2;
+      // A graph reaches the card's border (local fork): it is held to the card.
+      lv_area_t held=content;if(w.extra_mode=="graph")lv_obj_get_coords(w.tile,&held);
+      const bool extra_inside=extra.x1>=held.x1 && extra.x2<=held.x2 && extra.y1>=held.y1 && extra.y2<=held.y2;
       if(!extra_inside)ESP_LOGE("ui_test","Extra bounds slot=%u mode=%s extra=%d,%d..%d,%d content=%d,%d..%d,%d",(unsigned)w.index,w.extra_mode.c_str(),(int)extra.x1,(int)extra.y1,(int)extra.x2,(int)extra.y2,(int)content.x1,(int)content.y1,(int)content.x2,(int)content.y2);
       fits=fits && extra_inside;
     // A dial's ticks are strokes standing on the rim of the dial, and a stroke straddles the line it is drawn
@@ -9924,11 +10215,11 @@ inline bool check_tile_geometry() {
         // The bedside clock's digits count by their glyphs: a font's line box keeps room above the digits that on a
         // 350 px face is taller than the card's padding, and nothing is drawn there.
         if(w.extra_mode=="bedside" && (p==w.parts[0]||p==w.parts[1])){int top,h;digit_box(bedside_digits(),top,h);part.y1+=top;part.y2=part.y1+h-1;}
-        const lv_area_t &room=dial?card_box:content;
+        const lv_area_t &room=dial||w.extra_mode=="graph"?card_box:content;
         bool inside=part.x1>=room.x1 && part.x2<=room.x2 && part.y1>=room.y1 && part.y2<=room.y2;
         if(!inside)ESP_LOGE("ui_test","Part bounds slot=%u mode=%s part=%d,%d..%d,%d room=%d,%d..%d,%d",(unsigned)w.index,w.extra_mode.c_str(),(int)part.x1,(int)part.y1,(int)part.x2,(int)part.y2,(int)room.x1,(int)room.y1,(int)room.x2,(int)room.y2);
         fits=fits && inside;
-        if(w.extra_mode=="graph" && !custom)fits=fits && (w.wide && !w.full?part.x1>value.x2:part.y1>value.y2);
+        if(w.extra_mode=="graph" && !custom)fits=fits && (lv_area_get_width(&card_box)*5>lv_area_get_height(&card_box)*6 && (!w.full||w.soft_drawn)?part.x1>value.x2:part.y1>value.y2);
       }
     }
     // The board's bedside digits fit its page in one of the three arrangements (bedside_digits, looks/shared/digits.yaml).
@@ -10538,8 +10829,95 @@ inline void prepare_cancel() {
 // The settings are applied every minute; only a real change places the page again (firmware 0.3.2+), and then every
 // card, kept ones too, is measured anew for the room the bar leaves.
 inline int applied_buttons=-1;
+// The Theme setting changed (local fork): the tile area moves into the top bar's room or back, and every card, kept
+// ones too, is painted and measured again. Called with the page buttons' check, on every settings change.
+inline int applied_theme=-1;
+// Vision's page (local fork): a linear gradient from top to bottom behind the glass cards, the one chosen
+// (settings_screen::vision_bg) or the owner's own two colours; the other looks give the page back to its paint.
+// The panel shows 16-bit colour (RGB565): a slow, dark gradient drawn straight onto it falls into bands a few rows
+// tall. So the gradient is drawn here, once, into a strip four pixels wide and as tall as the page, ordered-dithered
+// with a 4 x 4 Bayer matrix, and the page repeats that strip across (bg_image_tiled): 4 KB on a 480 px page, smooth
+// to the eye. Only a change is drawn again, as this runs with every settings change.
+inline std::vector<uint16_t> vision_strip;
+inline lv_image_dsc_t vision_strip_dsc{};
+inline uint32_t vision_strip_key[3] = {UINT32_MAX, UINT32_MAX, UINT32_MAX};
+inline void vision_dither(uint32_t top, uint32_t bottom, int height) {
+  static constexpr uint8_t BAYER[4][4] = {{0, 8, 2, 10}, {12, 4, 14, 6}, {3, 11, 1, 9}, {15, 7, 13, 5}};
+  // Written in place: a raw RGB565 picture is drawn straight from these pixels, so keeping the buffer where it is (a
+  // page's height does not change) lets a new gradient show without asking LVGL's image cache to forget the old one.
+  if (vision_strip.size() != (size_t) 4 * height) vision_strip.assign((size_t) 4 * height, 0);
+  for (int y = 0; y < height; ++y) {
+    const float t = height > 1 ? (float) y / (float) (height - 1) : 0.0f;
+    float c[3];
+    for (int k = 0; k < 3; ++k) {
+      const float a = (float) (top >> (16 - 8 * k) & 0xFF), b = (float) (bottom >> (16 - 8 * k) & 0xFF);
+      c[k] = a + (b - a) * t;
+    }
+    for (int x = 0; x < 4; ++x) {
+      const float d = ((float) BAYER[y & 3][x] + 0.5f) / 16.0f;
+      const int r = std::clamp((int) (c[0] * 31.0f / 255.0f + d), 0, 31);
+      const int g = std::clamp((int) (c[1] * 63.0f / 255.0f + d), 0, 63);
+      const int b = std::clamp((int) (c[2] * 31.0f / 255.0f + d), 0, 31);
+      vision_strip[(size_t) y * 4 + x] = (uint16_t) (r << 11 | g << 5 | b);
+    }
+  }
+  vision_strip_dsc = lv_image_dsc_t{};
+  vision_strip_dsc.header.magic = LV_IMAGE_HEADER_MAGIC;
+  vision_strip_dsc.header.cf = LV_COLOR_FORMAT_RGB565;
+  vision_strip_dsc.header.w = 4;
+  vision_strip_dsc.header.h = (uint32_t) height;
+  vision_strip_dsc.header.stride = 4 * sizeof(uint16_t);
+  vision_strip_dsc.data_size = (uint32_t) (vision_strip.size() * sizeof(uint16_t));
+  vision_strip_dsc.data = reinterpret_cast<const uint8_t *>(vision_strip.data());
+}
+inline void page_glass() {
+  auto *page = tile_grid ? lv_obj_get_parent(tile_grid) : nullptr;
+  if (!page) return;
+  if (theme::vision) {
+    const int at = std::clamp<int>(settings_screen::vision_bg, 0, theme::VISION_GRADIENT_COUNT - 1);
+    const bool own = at == theme::VISION_CUSTOM;
+    const uint32_t top = own && settings_screen::vision_top >= 0 ? (uint32_t) settings_screen::vision_top : theme::VISION_GRADIENTS[at].top;
+    const uint32_t bottom = own && settings_screen::vision_bottom >= 0 ? (uint32_t) settings_screen::vision_bottom : theme::VISION_GRADIENTS[at].bottom;
+    const int height = std::max<int>(1, lv_display_get_vertical_resolution(lv_obj_get_display(page)));
+    if (vision_strip_key[0] == top && vision_strip_key[1] == bottom && vision_strip_key[2] == (uint32_t) height) return;
+    vision_strip_key[0] = top; vision_strip_key[1] = bottom; vision_strip_key[2] = (uint32_t) height;
+    // The colour under the strip, the gradient's middle, for the moment before the picture is drawn.
+    lv_obj_set_style_bg_color(page, lv_color_hex(theme::mix(top, bottom, 128)), 0);
+    lv_obj_remove_local_style_prop(page, LV_STYLE_BG_GRAD_DIR, LV_PART_MAIN);
+    lv_obj_remove_local_style_prop(page, LV_STYLE_BG_GRAD_COLOR, LV_PART_MAIN);
+    vision_dither(top, bottom, height);
+    lv_obj_set_style_bg_image_src(page, &vision_strip_dsc, 0);
+    lv_obj_set_style_bg_image_tiled(page, true, 0);
+    lv_obj_invalidate(page);
+  } else {
+    if (vision_strip_key[2] == UINT32_MAX) return;
+    vision_strip_key[0] = vision_strip_key[1] = vision_strip_key[2] = UINT32_MAX;
+    for (auto prop : {LV_STYLE_BG_COLOR, LV_STYLE_BG_GRAD_COLOR, LV_STYLE_BG_GRAD_DIR, LV_STYLE_BG_IMAGE_SRC, LV_STYLE_BG_IMAGE_TILED})
+      lv_obj_remove_local_style_prop(page, prop, LV_PART_MAIN);
+  }
+}
+inline int applied_header=-1;
+inline bool theme_changed() {
+  const int now=std::clamp<int>(settings_screen::theme,0,3), head=header_shown()?1:0;
+  // Soft's colours repaint the page and its cards whenever they change (theme::set_soft_palette), whatever else does.
+  theme::set_soft_palette(settings_screen::soft_bg);
+  if(applied_theme==now && applied_header==head)return false;
+  const bool first=applied_theme<0;
+  applied_theme=now;applied_header=head;theme::glow=now==1;
+  grid_chrome();
+  page_glass();
+  // Vision is dark whatever Dark mode says; set_vision repaints, and its redraw draws the tiles again.
+  theme::set_vision(now==2);
+  theme::set_soft(now==3);
+  if(first)return false;
+  header_renderer.restyle();
+  render_header();
+  return true;
+}
 inline void page_buttons_changed() {
-  if(!shown_page || !nav_number || applied_page<0 || applied_buttons==(page_buttons?1:0))return;
+  const bool look=theme_changed();
+  page_glass();  // a new gradient for Vision's page, drawn only when it changed
+  if(!shown_page || !nav_number || applied_page<0 || (!look && applied_buttons==(page_buttons?1:0)))return;
   applied_buttons=page_buttons?1:0;
   each_card([](Widgets &w){w.cached_active=-1;w.panel_dirty=true;});
   apply_page(applied_page);

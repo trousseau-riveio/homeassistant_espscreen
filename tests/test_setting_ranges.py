@@ -33,10 +33,15 @@ def firmware_set():
     body = SCREEN.split('inline SetResult set(', 1)[1].split('else return SetResult::unknown;', 1)[0]
     out = {}
     for key, code in re.findall(r'key == "(\w+)"\)(.*?)(?=else if \(key ==|\Z)', body, re.S):
+        if key in ('vision_top', 'vision_bottom'):  # Vision's own colours (local fork), 0xRRGGBB, not a range
+            continue
         if 'flag(value)' in code:
             out[key] = 'bool'
             continue
-        low, high = re.search(r'std::clamp<int32_t>\(value, (-?\d+), ([\w.]+)\)', code).groups()
+        low, high = re.search(r'std::clamp<int32_t>\(value, (-?\d+), ([\w.]+(?: - 1)?)\)', code).groups()
+        if high in ('VISION_BG_COUNT - 1', 'SOFT_BG_COUNT - 1'):  # Vision's gradients, Soft's palettes (local fork), by their names
+            names = 'vision_bg_options[] = {' if high.startswith('VISION') else 'soft_bg_options[] = {'
+            high = str(SCREEN.count('"', SCREEN.index(names), SCREEN.index('};', SCREEN.index(names))) // 2 - 1)
         out[key] = (int(low), CAPPED if high == 's.brightness' else int(high))
     return out
 
@@ -54,6 +59,13 @@ def page_rows():
     for key in re.findall(r'moment\(screen_text::txt::\w+, \[\]\(\) -> int32_t \{[^}]*\},\s*'
                           r'\[\]\(int32_t value\) \{ set\("(\w+)", value\); \}', SCREEN):
         out[key] = 'moment'
+    # A choice among names (the look, Vision's page, Soft's colours): its index, 0 to its count less one.
+    for key, count in re.findall(r'choice\(screen_text::txt::\w+, \[\]\(\) -> int32_t \{[^}]*\},\s*'
+                                 r'\[\]\(int32_t value\) \{ set\("(\w+)", value\); \}, \w+, (\w+)', SCREEN):
+        if not count.isdigit():
+            names = re.search(r'%s_options\[\] = \{(.*?)\};' % key, SCREEN, re.S).group(1)
+            count = len(re.findall(r'"[^"]*"', names))
+        out[key] = (0, int(count) - 1, 1)
     turns = set()
     if 'set("rotation", value ? 180 : 0)' in SCREEN:
         turns |= {0, 180}
@@ -73,6 +85,8 @@ def entities():
         if not keys:
             continue
         section = [name for start, name in sections if start < block.start()][-1]
+        if section == 'text':  # Vision's own colours (#RRGGBB), which choose its Custom gradient: no range of their own
+            continue
         (key,) = keys
         text = block.group(1)
         number = lambda name: float(re.search(rf'^\s+{name}: (-?[\d.]+)\s*$', text, re.M).group(1))
@@ -84,8 +98,12 @@ def entities():
             out[key] = ('time',)
         elif section == 'select':
             # Every option the entity can have: the quarter turns of square glass and the half turn of the rest.
-            options = re.search(r'options: \$\{ (\[.*?\]) if', text).group(1)
-            out[key] = ('select', tuple(sorted(int(v) for v in re.findall(r'"(\d+)°"', options))))
+            turns = re.search(r'options: \$\{ (\[.*?\]) if', text)
+            if turns:
+                out[key] = ('select', tuple(sorted(int(v) for v in re.findall(r'"(\d+)°"', turns.group(1)))))
+            else:  # a look's or its colours' names, by their index (settings_screen::*_options)
+                names = re.findall(r'"([^"]+)"', re.search(r'options: (\[.*?\])', text).group(1))
+                out[key] = ('select', tuple(range(len(names))))
         else:
             raise AssertionError(f'{key}: a setting entity in {section}:, which this test does not know')
     return out
@@ -134,6 +152,10 @@ class OneRange(unittest.TestCase):
             ends = (firmware[0], SETTING_RULES[CAPPED][2] if firmware[1] == CAPPED else firmware[1])
             self.assertEqual((low, high), ends, f'{key}: SETTING_RULES and settings_screen::set()')
             self.assertEqual(self.page[key][:2], ends, f"{key}: the settings page's row")
+            if self.entities[key][0] == 'select':  # a choice among names: as many options as the range holds
+                self.assertEqual(self.entities[key][1], tuple(range(low, high + 1)), f"{key}: the select entity's options")
+                self.assertEqual(self.editor[key]['options'], list(range(low, high + 1)), f"{key}: the editor's options")
+                continue
             kind, entity_low, entity_high, _ = self.entities[key]
             self.assertEqual((kind, entity_low, entity_high), ('number', low, high), f"{key}: the number entity's min and max")
             row = self.editor[key]

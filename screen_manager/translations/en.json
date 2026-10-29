@@ -160,6 +160,10 @@
       "media_player": "Volume",
       "wake_when_moved": "Wake when moved",
       "dark_mode": "Dark mode",
+      "theme": "Theme",
+      "header": "Top bar",
+      "vision_bg": "Vision background",
+      "soft_bg": "Soft colors",
       "auto_standby": "Auto standby",
       "standby_after": "Standby after",
       "standby_brightness": "Standby brightness",
@@ -2287,6 +2291,11 @@
         "none": "No controls",
         "never": "Don't show again",
         "done": "Done"
+      },
+      "layout": {
+        "label": "Layout",
+        "row": "Icon beside text",
+        "stacked": "Icon above text"
       }
     },
     "precision": {
@@ -2426,6 +2435,10 @@
       "rows": {
         "brightness": "Brightness",
         "dark_mode": "Dark mode",
+        "theme": "Theme",
+        "header": "Top bar",
+        "vision_bg": "Vision background",
+        "soft_bg": "Soft colors",
         "standby_enabled": "Auto standby",
         "standby_seconds": "Standby after",
         "standby_brightness": "Standby brightness",

@@ -224,7 +224,82 @@ inline constexpr Pair ROLES[ROLE_COUNT] = {
 // The look on screen. The board sets it through set_dark() (below) from the Dark mode setting; the table and the
 // helpers only read it.
 inline bool dark = false;
-inline uint32_t hex(Role role) { return dark ? ROLES[role].dark : ROLES[role].light; }
+// The Glow look (local fork, settings_screen::theme): a card that is on takes a soft wash of its state colour, its
+// corners are sharper. The board sets it through runtime_tiles::theme_changed().
+inline bool glow = false;
+// Glow's card corner, in the look's pixels (ui::px), against the look's TILE_RADIUS.
+inline constexpr int GLOW_RADIUS = 8;
+// The Vision look (local fork, settings_screen::theme 2), after visionOS: glass cards on a dark slate page, a card that
+// is on turns to glass of its state colour (amber for a lamp), the icon at the top left without a circle and the name
+// under it at the left in a medium face. It is always dark, so every word on every card is light and reads on both
+// glasses; the Dark mode setting stays what it is and counts again in the other looks.
+inline bool vision = false;
+inline constexpr int VISION_RADIUS = 16;
+// Glow and Vision draw no circle behind a tile's icon.
+inline bool bare() { return glow || vision; }
+// The Soft look (local fork, settings_screen::theme 3): warm paper cards on a warm page, the icon in a grey circle at
+// the top left, the state at the top right (green while on), a large name and, for anything with an on and an off,
+// a pill switch with an orange knob at the bottom (runtime_tiles). It is light or dark as its colours are (settings_screen::soft_bg); Dark mode counts again in the
+// other looks.
+inline bool soft = false;
+inline constexpr int SOFT_RADIUS = 18;
+// Soft's colours (settings_screen::soft_bg): the page, a card and its hairline, the icon's circle and the switch's track,
+// the words, the state word while on, and the accent of the switch's knob, a slider and an icon that is on.
+// A dark palette draws the rest of the screen dark too (drawn_dark): its top bar, its keys and its cards' pop-ups.
+struct SoftPalette { const char *name; uint32_t page, card, line, circle, ink, muted, on, knob; bool dark = false; };
+inline constexpr SoftPalette SOFT_PALETTES[] = {
+  // A page a few shades deeper than its cards, so each card stands out; dark words, and an accent strong on white.
+  {"Warm", 0xDED8CC, 0xFCFBF8, 0xD6D0C4, 0xECE8E0, 0x141414, 0x5E5B56, 0x4E8F2E, 0xF29A33},
+  {"Sage", 0xC9D6C3, 0xFBFCFA, 0xC4CFBF, 0xE3EADF, 0x141A13, 0x545C51, 0x3A7A33, 0x5E9A4C},
+  {"Ocean", 0xC5D5E5, 0xFBFCFE, 0xBFCCDA, 0xE2EAF2, 0x121822, 0x4F5A66, 0x23649F, 0x3F8BD0},
+  {"Rose", 0xE6CFD0, 0xFDFAFA, 0xDCC6C7, 0xF1E4E4, 0x1C1314, 0x66585A, 0x9E3F4C, 0xE2697A},
+  {"Lavender", 0xD3CEE6, 0xFCFBFE, 0xCBC6DE, 0xE8E5F2, 0x16141F, 0x5A5668, 0x5643A8, 0x7E6AD8},
+  {"Sand", 0xE0D2B8, 0xFCF9F3, 0xD6C9AF, 0xEEE5D4, 0x1A160F, 0x625A4C, 0x8A5D16, 0xD18E2B},
+  {"Stone", 0xCFCFCF, 0xFFFFFF, 0xC8C8C8, 0xEBEBEB, 0x111111, 0x555555, 0x1F1F1F, 0x262626},
+  // The same, dark: a near-black page, cards a step lighter, light words; the accents a touch brighter to carry on dark.
+  {"Warm Dark", 0x1A1917, 0x282623, 0x36332E, 0x35322D, 0xF2EFEA, 0xA39E96, 0x8CC66A, 0xF29A33, true},
+  {"Sage Dark", 0x151A15, 0x222922, 0x2F382E, 0x2D372C, 0xEEF2EC, 0x9CA699, 0x86C474, 0x74B260, true},
+  {"Ocean Dark", 0x12171E, 0x1D2531, 0x293444, 0x273345, 0xEDF2F7, 0x98A4B2, 0x6FB0EA, 0x4D9BE0, true},
+  {"Rose Dark", 0x1C1516, 0x2B2123, 0x3B2E31, 0x392B2E, 0xF6EEEF, 0xAE9C9F, 0xEE8E9B, 0xE2697A, true},
+  {"Lavender Dark", 0x17151F, 0x242130, 0x322E42, 0x302C40, 0xF1EFF8, 0xA49FB6, 0xA898F0, 0x8C78E6, true},
+  {"Sand Dark", 0x1B1813, 0x29251D, 0x383227, 0x363025, 0xF4EFE6, 0xA89F8E, 0xE2B15E, 0xD18E2B, true},
+  {"Graphite", 0x141414, 0x222222, 0x303030, 0x2E2E2E, 0xF2F2F2, 0x9E9E9E, 0xE6E6E6, 0xD6D6D6, true},
+};
+inline constexpr int SOFT_PALETTE_COUNT = sizeof(SOFT_PALETTES) / sizeof(SOFT_PALETTES[0]);
+inline constexpr uint32_t SOFT_KNOB_OFF = 0xFFFFFF;
+inline int soft_palette = 0;
+inline const SoftPalette &soft_colors() { return SOFT_PALETTES[soft_palette >= 0 && soft_palette < SOFT_PALETTE_COUNT ? soft_palette : 0]; }
+// Vision's colours. The page is a gradient (vision_gradient, settings_screen::vision_bg); a card is white glass over
+// it (a share of white, and a hairline of a little more); a card that is on is glass of its state colour, a little
+// more opaque, with a hairline of that colour lighter. The words are light on both.
+inline constexpr uint32_t VISION_PAGE = 0x22272D, VISION_PAGE_TOP = 0x343B44;
+inline constexpr uint32_t VISION_GLASS = 0xFFFFFF;
+// The page's gradients (settings_screen::vision_bg), lighter at the top, each dark enough for light words and glass;
+// the last one is the owner's own two colours (settings_screen::vision_top, vision_bottom).
+struct VisionGradient { const char *name; uint32_t top, bottom; };
+inline constexpr VisionGradient VISION_GRADIENTS[] = {
+  {"Slate", 0x343B44, 0x22272D},
+  {"Ocean", 0x1E4467, 0x0E1A2B},
+  {"Aurora", 0x1D5450, 0x18213A},
+  {"Dusk", 0x553366, 0x1B1C35},
+  {"Ember", 0x66392A, 0x201A1D},
+  {"Forest", 0x2E5238, 0x141D17},
+  {"Graphite", 0x3C3C3F, 0x1A1A1C},
+  {"Custom", 0x343B44, 0x22272D},
+};
+inline constexpr int VISION_GRADIENT_COUNT = sizeof(VISION_GRADIENTS) / sizeof(VISION_GRADIENTS[0]);
+inline constexpr int VISION_CUSTOM = VISION_GRADIENT_COUNT - 1;
+// The owner's own colour, or the first gradient's where none was set (settings_screen::vision_top/_bottom are -1).
+inline uint32_t vision_own(int32_t color, bool top) { return color >= 0 ? (uint32_t) color : top ? VISION_GRADIENTS[0].top : VISION_GRADIENTS[0].bottom; }
+inline constexpr uint8_t VISION_GLASS_OPA = 34, VISION_GLASS_LINE_OPA = 46, VISION_LIT_OPA = 112, VISION_LIT_LINE_OPA = 150;
+inline constexpr uint32_t VISION_INK = 0xF2F3F5, VISION_MUTED = 0xA9AFB7, VISION_ICON_OFF = 0xD4D8DD, VISION_LIT_MUTED = 0xE6E3DC;
+// The Dark mode setting as it was asked for; `dark` is what is drawn, and Vision is always dark (set_vision).
+inline bool dark_wanted = false;
+inline uint32_t hex(Role role) {
+  if (role == PAGE && vision) return VISION_PAGE;
+  if (role == PAGE && soft) return soft_colors().page;
+  return dark ? ROLES[role].dark : ROLES[role].light;
+}
 
 // ---- mixing, exactly as LVGL 9 mixes two colours (lv_color_mix), so a value here is the value on the glass
 inline uint32_t mix(uint32_t first, uint32_t second, uint8_t amount) {
@@ -294,6 +369,8 @@ inline uint32_t outline(uint32_t own) {
   if (!own) return hex(LINE);
   return dark ? mix(surface(own), 0xFFFFFF, 232) : mix(own, 0x000000, 220);
 }
+// The same hairline around a Glow card's wash (local fork), which is already the colour this look draws.
+inline uint32_t outline_of(uint32_t drawn) { return dark ? mix(drawn, 0xFFFFFF, 232) : mix(drawn, 0x000000, 220); }
 
 // ---- Home Assistant's state colours
 // What a state looks like in Home Assistant's frontend (its --state-*-color and --*-color variables), the same in both
@@ -376,6 +453,18 @@ inline uint32_t tint(uint32_t color, uint8_t amount) {
 inline uint32_t icon(uint32_t color) {
   color = state(color);
   return dark ? mix(foreground(color), 0xFFFFFF, 230) : mix(color, 0x333333, 205);
+}
+// Vision's icon (local fork): its state colour lifted towards white on its coloured glass while it is on, so it stands
+// out of a card of the same hue; a soft white on clear glass.
+inline uint32_t vision_icon(uint32_t color, bool lit) { return lit ? mix(state(color), 0xFFFFFF, 140) : VISION_ICON_OFF; }
+// A lit Vision card's glass and its hairline (local fork).
+inline uint32_t vision_lit(uint32_t color) { return state(color); }
+inline uint32_t vision_lit_line(uint32_t color) { return mix(state(color), 0xFFFFFF, 170); }
+// Glow's icon (local fork) stands on the card's wash without a circle behind it: deeper in light, so an amber lamp
+// still reads on its amber card, and the full lifted colour in dark.
+inline uint32_t glow_icon(uint32_t color) {
+  color = state(color);
+  return dark ? foreground(color) : mix(color, 0x1B1B1B, 185);
 }
 // The soft area under a graph line: a fifth of the line's colour in light; less over graphite, where the same share
 // turns a large brown or purple block.
@@ -474,8 +563,37 @@ inline void (*redraw)() = nullptr;
 // The one way the look changes. Every paint is filled again, what code painted itself follows through redraw(), and the
 // glass is drawn again once, whole. A look the screen already has costs nothing, so the setting may be applied on every
 // change.
+inline void look(bool on, bool force);
+// What is drawn dark: Vision always, Soft as its colours are (SoftPalette::dark), the Dark mode setting in the other looks.
+inline bool drawn_dark() { return vision || (soft ? soft_colors().dark : dark_wanted); }
+// The Dark mode setting. Vision keeps the screen dark and Soft as its colours are whatever it says, and give it back when
+// they go.
 inline void set_dark(bool on) {
-  if (on == dark) return;
+  dark_wanted = on;
+  look(drawn_dark(), false);
+}
+// The Vision look on or off (runtime_tiles::theme_changed): dark at once, and its page and cards drawn again.
+inline void set_vision(bool on) {
+  if (on == vision) return;
+  vision = on;
+  look(drawn_dark(), true);
+}
+// The Soft look on or off, the same way: light at once, its page and cards drawn again.
+inline void set_soft(bool on) {
+  if (on == soft) return;
+  soft = on;
+  look(drawn_dark(), true);
+}
+// Soft's colours (settings_screen::soft_bg), the same way: its page and cards drawn again while it is the look.
+inline void set_soft_palette(int at) {
+  at = at >= 0 && at < SOFT_PALETTE_COUNT ? at : 0;
+  if (at == soft_palette) return;
+  soft_palette = at;
+  if (soft) look(drawn_dark(), true);
+}
+// What is drawn: dark or light. `force` repaints even when that stays, for a change of page colour.
+inline void look(bool on, bool force) {
+  if (on == dark && !force) return;
   dark = on;
   if (paints) paints();
   for (size_t i = 0; i < own.size(); ++i) if (own[i]) fill(own[i], static_cast<Paint>(i));

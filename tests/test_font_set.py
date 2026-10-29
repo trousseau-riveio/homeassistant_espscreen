@@ -19,6 +19,12 @@ DIGITS = {'clock_digits', 'setpoint_digits', 'display_digits', 'bedside_digits'}
 ICONS = {'materialdesign_icons_mini', 'materialdesign_icons', 'materialdesign_icons_big', 'watch_icon', 'materialdesign_icons_back',
          'materialdesign_icons_status'}
 MARK = {'brand_wordmark'}
+# The looks' own faces (settings_screen::theme, looks/shared/themes.yaml): Glow's icon without a circle, Vision's medium
+# name, Soft's Figtree in three steps for the name, the state and a big value, and its outline icons. The standard look
+# carries them; the compact look, a 4 MB board's, has no room for them.
+LOOKS = {'materialdesign_icons_glow', 'vision_label', 'soft_name_s', 'soft_name_m', 'soft_name_l', 'soft_state_s',
+         'soft_state_m', 'soft_state_l', 'soft_value_s', 'soft_value_m', 'soft_value_l', 'soft_outline_icons',
+         'soft_outline_icons_mini', 'soft_outline_icons_big'}
 
 
 def fonts(name):
@@ -29,7 +35,8 @@ class FontSetTests(unittest.TestCase):
     def test_every_board_renders_the_set_and_nothing_else(self):
         for name in profiles.PROFILES:
             with self.subTest(name):
-                self.assertEqual({font for font, _ in fonts(name)}, TEXT | DIGITS | ICONS | MARK)
+                compact = profiles.evaluate(profiles.raw_substitutions(ROOT / name))['LOOK'] == 'compact'
+                self.assertEqual({font for font, _ in fonts(name)}, TEXT | DIGITS | ICONS | MARK | (set() if compact else LOOKS))
 
     def test_the_bedside_clock_takes_the_display_step_where_its_own_would_be_barely_larger(self):
         # A 4-inch Guition and a CYD: the page takes digits less than a fifth larger than half its width, so the clock

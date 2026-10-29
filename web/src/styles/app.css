@@ -417,6 +417,9 @@ a:hover { text-decoration: underline; }
 .tile .tx { display: grid; min-width: 0; gap: 1px; }
 .tile .head { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; }
 .tile .head.top { flex: none; }
+/* A single card asked to stack (layout: stacked, runtime_tiles.h): the icon over the name and state, all centred. */
+.tile .head.stacked { flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+.tile .head.stacked .tx { width: 100%; }
 .tile .nm { font-size: 11.5px; font-weight: 600; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tile .st { font-size: 10.5px; color: #5a5f66; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .device.compact .tile { padding: 6px 7px; }
@@ -884,6 +887,7 @@ button.insp-sec-head:hover h3 { color: var(--ink); }
    past the card's edge. */
 .srow.setting-choice { flex-wrap: wrap; row-gap: 6px; }
 .srow.setting-choice .s-control { margin-left: auto; max-width: 100%; min-width: 0; }
+.srow .s-select { min-width: 160px; height: 36px; font-size: 14px; }
 .srow.setting-choice .seg { max-width: 100%; }
 .srow.setting-choice .seg button { padding-inline: 9px; }
 .srow.inactive .s-label, .srow.inactive .s-control { opacity: 0.45; }

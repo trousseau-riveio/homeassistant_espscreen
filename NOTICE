@@ -35,7 +35,8 @@ GSL3680 touch firmware (components/gsl3680_v3/gsl3680_firmware.h)
   in the ESPHome community.
 
 Fonts and icons
-  Roboto and Montserrat: SIL Open Font License 1.1 (fonts/Roboto-OFL.txt). Material Design Icons: Pictogrammers Free
+  Roboto and Montserrat: SIL Open Font License 1.1 (fonts/Roboto-OFL.txt). Figtree (the Soft look): SIL Open Font
+  License 1.1 (fonts/Figtree-OFL.txt). Material Design Icons: Pictogrammers Free
   License, the fonts under the Apache License 2.0 (fonts/MDI-LICENSE.txt). They keep their own licences.
 
 Pictures
