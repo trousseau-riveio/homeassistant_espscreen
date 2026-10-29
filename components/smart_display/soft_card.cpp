@@ -6,7 +6,251 @@
 // as page_receiver.cpp has (docs/RELEASING.md, "The Xtensa literal range"). runtime_tiles::render_slot calls it.
 #include "runtime_tiles.h"
 namespace runtime_tiles {
+// Soft's player (local fork): the music, not the player. While a track plays or rests the card shows its cover, its
+// title and its artist and the keys, never the player's icon or name; a player with nothing to play shows its name and
+// its state beside a music note in the cover's place. Each shape of card has its own arrangement:
+//  - a strip (more than twice as wide as tall): one row, the cover at the left, the words, the keys at the right;
+//  - a landscape card: the cover as tall as the card at the left, the words over the keys beside it;
+//  - a square card: the cover at the top left with the words beside it, the keys along the bottom;
+//  - a standing card: the cover on top, the words under it, centred, the keys at the bottom;
+//  - one cell: the cover with play beside it at the top, the words at the bottom.
+// The volume (Controls: Volume, or Volume and playback where there is room for both) is Soft's own slider, over the
+// keys. Keys keep a finger's size (ui::touch_min): a row that does not fit drops previous first, then next, play last.
+// The tile's options say what it shows:
+//  - Display: Cover puts the tile's picture in a rounded square, cut over the card's own colour (tile_ask); Standard
+//    shows no square at all, the words and the keys take the card;
+//  - Second line: Automatic is the artist (the album without one), None leaves the title alone, and a text or a value
+//    of the player's says that instead;
+//  - Controls: the keys, the volume, both or none;
+//  - Icon: a chosen icon stands in the cover's place until the cover is here, the music note otherwise.
+static void soft_media(Widgets &w,const Tile &t,const SoftCard &c){
+  w.soft_drawn=true;w.soft_watch=false;w.soft_media=true;
+  hide_extra(w);lv_obj_add_flag(w.progress,LV_OBJ_FLAG_HIDDEN);set_hidden(w.unit,true);
+  const int pad=std::clamp(std::min(tile_width(w),tile_height(w))*9/100,ui::px(12),ui::px(24));
+  for(auto prop:{LV_STYLE_PAD_TOP,LV_STYLE_PAD_BOTTOM,LV_STYLE_PAD_LEFT,LV_STYLE_PAD_RIGHT})set_number(w.tile,prop,pad);
+  const int cw=content_width(w),ch=content_height(w);
+  const int gap=std::max(ui::px(8),pad*2/3);
+  const int finger=ui::touch_min();
+  const auto &x=t.extra();
+  const bool track=media_track(t);
+  const std::string title=track&&!x.media_title.empty()?x.media_title:(t.name.empty()?t.entity:t.name);
+  std::string artist=track?(x.media_artist.empty()?x.media_album:x.media_artist):c.value;
+  std::string chosen;
+  if(chosen_subtitle(t,chosen))artist=chosen;
+  const bool art=t.display=="cover";
+  // A note in the cover's place until the cover is here, and where there is none: never the player's own icon, unless
+  // one was chosen for the tile.
+  label(w.icon,t.icon.empty()?"\xF3\xB0\x8E\x87":t.icon.c_str());  // mdi:music-note
+  const std::string kind=tile_controls::panel_kind(t);
+  const bool live=t.available()&&!t.builtin()&&fresh();
+  const bool volume_asked=kind=="volume"||tile_controls::media_volume_selected(t);
+  const bool volume=volume_asked&&live&&(t.supported&tile_controls::feature::MEDIA_VOLUME_SET);
+  const bool keys_asked=tile_controls::is_key_row(kind);
+  // The shape of the card.
+  const bool strip=cw*10>=ch*22;
+  const bool narrow=cw<3*finger+2*ui::px(6);
+  const bool small=!strip&&narrow&&ch*10<cw*17;
+  const bool landscape=!strip&&!small&&cw*10>=ch*13;
+  const bool standing=!strip&&!small&&!landscape&&(narrow||ch*10>=cw*13);
+  // The keys: built as every card's (layout_panel, the keys alone), then sized and placed here.
+  std::array<int,3> shown{};int count=0;
+  if(keys_asked&&live&&layout_panel(w,t,c.large_tile,cw,ch,-1,0)){
+    for(int n=0;n<3;++n)if(w.keys[n]&&!lv_obj_has_flag(w.keys[n],LV_OBJ_FLAG_HIDDEN))shown[count++]=n;
+  }else hide_panel(w);
+  int play=-1;
+  for(int i=0;i<count;++i)if(w.key_commands[shown[i]]==tile_controls::MEDIA_PLAY_PAUSE)play=i;
+  const int side=std::min(cw,ch);
+  const int key=strip?std::clamp(ch*60/100,finger,ui::px(56)):small?finger:std::clamp(side*21/100,finger,ui::px(64));
+  const int big=play>=0&&!strip&&!small?std::min(key*6/5,std::max(key,side/3)):key;
+  const int key_gap=strip||small?ui::px(6):std::max(ui::px(8),key/3);
+  // Which keys a row of `fit` shows (3: all, 2: play and next, 1: play), and how wide that row is.
+  auto key_on=[&](int fit,int i){return fit>=3||i==play||(fit==2&&play>=0&&i>play);};
+  auto row_width=[&](int fit){
+    int width=0,laid=0;
+    for(int i=0;i<count;++i)if(key_on(fit,i)){width+=i==play?big:key;++laid;}
+    return width+std::max(0,laid-1)*key_gap;
+  };
+  // The most keys a row of `room` holds: previous goes first, then next.
+  auto row_keys=[&](int room){
+    if(row_width(3)<=room)return 3;
+    if(play>=0&&row_width(2)<=room)return 2;
+    if(play>=0&&row_width(1)<=room)return 1;
+    return 0;
+  };
+  int keys_w=0;
+  // Lays the row of `fit` keys from `left` (in the middle of `room` when centred), its middle line at `mid`; returns
+  // its width.
+  auto lay_keys=[&](int fit,int left,int mid,bool centred,int room){
+    std::array<bool,3> on{};
+    for(int i=0;i<count;++i)on[i]=key_on(fit,i);
+    const int width=row_width(fit);
+    int at=centred?left+std::max(0,(room-width)/2):left;
+    int xs[3]={0,0,0},ws[3]={0,0,0};
+    for(int i=0;i<count;++i){
+      auto *k=w.keys[shown[i]];
+      if(!on[i]){lv_obj_add_flag(k,LV_OBJ_FLAG_HIDDEN);w.key_commands[shown[i]]=tile_controls::NONE;continue;}
+      const int s=i==play?big:key;xs[i]=at;ws[i]=s;at+=s+key_gap;
+    }
+    // The panel holds the row: as wide as it, as tall as its biggest key.
+    const int top=mid-big/2;
+    int first=-1;
+    for(int i=0;i<count;++i)if(on[i]&&first<0)first=xs[i];
+    if(first<0){hide_panel(w);return 0;}
+    lv_obj_set_pos(w.panel,first,top);lv_obj_set_size(w.panel,width,big);
+    for(int i=0;i<count;++i)if(on[i]){
+      auto *k=w.keys[shown[i]];const int s=ws[i];
+      lv_obj_set_size(k,s,s);lv_obj_set_pos(k,xs[i]-first,(big-s)/2);
+      set_number(k,LV_STYLE_RADIUS,LV_RADIUS_CIRCLE);lv_obj_set_ext_click_area(k,std::max(0,(finger-s)/2));
+      // A big key takes the card's icon face, as the full-page player's play key does.
+      if(auto *icon=w.key_icons[shown[i]]){
+        const lv_font_t *face=s>=ui::px(56)&&w.icon_font?w.icon_font:mini_icon_font?mini_icon_font:w.icon_font;
+        if(lv_obj_get_style_text_font(icon,LV_PART_MAIN)!=face)set_font(icon,face);
+        center_icon(icon);
+      }
+    }
+    return width;
+  };
+  // The words: the title in the largest name face that its room calls for (two lines where `lines` allows and it needs
+  // them), the artist a size smaller under it; what does not fit goes, the artist first. Returns the block's height.
+  auto words=[&](int left,int top,int width,int height,int lines,bool centred,int target){
+    int size=0;
+    const auto names=soft_name_faces(),states=soft_state_faces();
+    for(int i=2;i>0;--i)if(names[i]&&static_cast<int>(lv_font_get_line_height(names[i]))*4<=target*5){size=i;break;}
+    auto letters=[&](const std::string &s,const lv_font_t *f,int i){return text_width(s,f)+(i==2?2:1)*static_cast<int>(s.size());};
+    // One line that does not fit steps the face down before it is cut; two lines take what one does not hold.
+    while(lines==1&&size>0&&names[size-1]&&letters(title,names[size],size)>width)--size;
+    const lv_font_t *name_face=names[size]?names[size]:w.title_font;
+    const int artist_size=std::max(0,size-1);
+    const lv_font_t *artist_face=states[artist_size]?states[artist_size]:w.value_font;
+    const int name_h=lv_font_get_line_height(name_face),artist_h=lv_font_get_line_height(artist_face);
+    int title_lines=lines>1&&letters(title,name_face,size)>width?2:1;
+    const int line_gap=std::max(ui::px(2),artist_h/5);
+    bool with_artist=!artist.empty();
+    auto block=[&]{return title_lines*name_h+(with_artist?line_gap+artist_h:0);};
+    if(block()>height&&with_artist)with_artist=false;
+    if(block()>height&&title_lines>1)title_lines=1;
+    const int y=top+std::max(0,(height-block())/2);
+    for(auto *o:{w.title,w.value})set_number(o,LV_STYLE_TEXT_LETTER_SPACE,size==2?2:1);
+    set_font(w.title,name_face);set_font(w.value,artist_face);
+    label(w.title,title);
+    lv_obj_set_pos(w.title,left,y);lv_obj_set_size(w.title,std::max(1,width),title_lines*name_h);
+    set_text_align(w.title,centred?LV_TEXT_ALIGN_CENTER:LV_TEXT_ALIGN_LEFT);
+    set_hidden(w.value,!with_artist);
+    if(with_artist){
+      lv_obj_set_pos(w.value,left,y+title_lines*name_h+line_gap);lv_obj_set_size(w.value,std::max(1,width),artist_h);
+      set_text_align(w.value,centred?LV_TEXT_ALIGN_CENTER:LV_TEXT_ALIGN_LEFT);
+      fit_value(w.value,artist,"","",width);
+    }
+    return block();
+  };
+  label(w.value,artist);
+  // Soft's slider for the volume, at x, y.
+  auto volume_at=[&](int left,int top,int width,int height){
+    lv_obj_align(w.slider,LV_ALIGN_TOP_LEFT,left,top);lv_obj_set_size(w.slider,width,height);
+    lv_obj_set_ext_click_area(w.slider,slider_zone(w,height));slider_handle(w.slider,width,height);
+    lv_obj_remove_flag(w.slider,LV_OBJ_FLAG_HIDDEN);travel_look(w.slider,t,false,true);
+    if(!lv_obj_has_state(w.slider,LV_STATE_PRESSED)&&lv_slider_get_value(w.slider)!=slider_value(t))lv_slider_set_value(w.slider,slider_value(t),LV_ANIM_OFF);
+  };
+  lv_obj_add_flag(w.slider,LV_OBJ_FLAG_HIDDEN);
+  const int slider_h=std::clamp(key*60/100,ui::px(22),ui::px(40));
+  auto cover=[&](int s,int left,int top){
+    if(!art||s<ui::px(28)){set_hidden(w.circle,true);if(w.picture)lv_obj_add_flag(w.picture,LV_OBJ_FLAG_HIDDEN);return;}
+    soft_icon(w,t,s,top,left);set_number(w.circle,LV_STYLE_RADIUS,s/6);
+  };
+  if(strip){
+    const int s=art?ch:0;
+    cover(s,0,0);
+    const int text_x=s>=ui::px(28)?s+gap:0;
+    int right=cw,words_h=ch;
+    if(volume&&!keys_asked){
+      // The volume under the words where the strip is tall enough for both, else at the right of the row.
+      const int under=std::clamp(ch*26/100,ui::px(18),ui::px(32));
+      if(ch-under-gap/2>=ui::px(40)){volume_at(text_x,ch-under,cw-text_x,under);words_h=ch-under-gap/2;}
+      else{
+        const int sw=std::clamp(cw*34/100,ui::px(90),ui::px(220));
+        volume_at(cw-sw,(ch-slider_h)/2,sw,slider_h);right=cw-sw-gap;
+      }
+    }else if(count){
+      const int fit=row_keys(cw-text_x-ui::px(84)-gap);
+      if(fit){keys_w=lay_keys(fit,0,ch/2,false,0);lv_obj_set_x(w.panel,cw-keys_w);right=cw-keys_w-gap;}
+      else hide_panel(w);
+    }
+    words(text_x,0,std::max(1,right-text_x),words_h,1,false,words_h<ch?words_h/2:ch/3);
+  }else if(small){
+    const int s=art?std::max(0,std::min(ch*50/100,cw-(count&&play>=0?finger+gap:0))):0;
+    cover(s,0,0);
+    if(count&&play>=0){lay_keys(1,0,s/2,false,0);lv_obj_set_x(w.panel,cw-finger);}
+    else hide_panel(w);
+    const int top=std::max(s,count&&play>=0?finger:0)+gap/2;
+    words(0,top,cw,ch-top,art?1:2,false,std::min(cw/7,(ch-top)/2));
+  }else if(landscape){
+    const int s=art?std::min(ch,cw*45/100):0;
+    cover(s,0,(ch-s)/2);
+    const int left=s?s+gap:0,room=cw-left;
+    int bottom=ch;
+    if(count){
+      const int fit=row_keys(room);
+      if(fit){lay_keys(fit,left,ch-big/2,true,room);bottom=ch-big-gap;}else hide_panel(w);
+    }
+    if(volume&&(!count||bottom-slider_h-gap>=ui::px(48))){volume_at(left,bottom-slider_h,room,slider_h);bottom-=slider_h+gap;}
+    words(left,0,room,std::max(1,bottom),2,false,std::min(room/7,ch/5));
+  }else if(standing){
+    int bottom=ch;
+    if(count){
+      const int fit=row_keys(cw);
+      if(fit){lay_keys(fit,0,ch-big/2,true,cw);bottom=ch-big-gap;}else hide_panel(w);
+    }
+    if(volume&&(!count||bottom-slider_h-gap>=ui::px(96))){volume_at(0,bottom-slider_h,cw,slider_h);bottom-=slider_h+gap;}
+    // The words take what the cover leaves; the cover takes the width while the card is tall enough for both.
+    const auto names=soft_name_faces();
+    const int target=std::min(cw/7,ch/9);
+    const int guess=2*std::max(ui::px(18),names[1]?static_cast<int>(lv_font_get_line_height(names[1])):ui::px(22))+ui::px(6);
+    const int s=art?std::max(0,std::min(cw,bottom-gap-guess)):0;
+    cover(s,(cw-s)/2,0);
+    const int top=s>=ui::px(28)?s+gap:0;
+    words(0,top,cw,std::max(1,bottom-top),art?2:3,true,art?target:std::min(cw/6,ch/7));
+  }else{
+    // A square card: the cover at the top left, the words beside it, the volume and the keys along the bottom.
+    int bottom=ch;
+    if(count){
+      const int fit=row_keys(cw);
+      if(fit){lay_keys(fit,0,ch-big/2,true,cw);bottom=ch-big-gap;}else hide_panel(w);
+    }
+      if(volume&&(!count||bottom-slider_h-gap>=ui::px(64))){volume_at(0,bottom-slider_h,cw,slider_h);bottom-=slider_h+gap;}
+    const int s=art?std::max(0,std::min(cw*52/100,bottom-gap)):0;
+    cover(s,0,0);
+    const int left=s>=ui::px(28)?s+gap:0;
+    // Without a cover the words take the room over the keys.
+    if(!s)words(0,0,cw,std::max(1,bottom-gap),3,false,std::min(cw/6,std::max(1,bottom-gap)/3));
+    else if(cw-left>=ui::px(80))words(left,0,cw-left,std::max(s,1),3,false,std::min((cw-left)/6,s/3));
+    else words(0,s+gap/2,cw,std::max(1,bottom-s-gap/2),1,false,std::min(cw/7,ch/6));
+  }
+  (void)keys_w;
+  soft_media_paint(w);
+}
+// The player's keys in Soft's colours: play filled in the palette's accent whether it plays or rests, the thing a
+// finger looks for; previous and next bare, a circle under the finger only while pressed. Called after every layout
+// and after the palette pass (style_panel), which paints every card's keys alike.
+void soft_media_paint(Widgets &w){
+  if(!w.soft_media||!w.panel)return;
+  const auto &colors=theme::soft_colors();
+  for(unsigned n=0;n<3;++n){
+    auto *k=w.keys[n];if(!k)continue;
+    if(w.key_commands[n]==tile_controls::MEDIA_PLAY_PAUSE){
+      set_color(k,LV_STYLE_BG_COLOR,lv_color_hex(colors.knob));
+      set_color(k,LV_STYLE_BG_COLOR,lv_color_hex(colors.knob),LV_STATE_CHECKED);
+      set_color(k,LV_STYLE_BG_COLOR,lv_color_hex(theme::pressed(colors.knob)),LV_STATE_PRESSED);
+      set_number(k,LV_STYLE_BG_OPA,LV_OPA_COVER);
+      if(w.key_icons[n])set_color(w.key_icons[n],LV_STYLE_TEXT_COLOR,theme::color(theme::ON_ACCENT));
+    }else{
+      set_number(k,LV_STYLE_BG_OPA,LV_OPA_TRANSP);
+      set_color(k,LV_STYLE_BG_COLOR,lv_color_hex(colors.circle),LV_STATE_PRESSED);
+      if(w.key_icons[n])set_color(w.key_icons[n],LV_STYLE_TEXT_COLOR,lv_color_hex(colors.ink));
+    }    }
+}
 void soft_card(Widgets &w,const Tile &t,const SoftCard &c){
+  w.soft_media=false;
+  if(c.d=="media_player"&&!w.full&&!c.watch&&!c.graph&&!t.favorite()){soft_media(w,t,c);return;}
   const std::string &d=c.d,&value=c.value,&unit=c.unit,&value_short=c.value_short,&value_tail=c.value_tail;
   const bool with_panel=c.with_panel,mini=c.mini,large_tile=c.large_tile,watch=c.watch,graph=c.graph;
   int content_w=c.content_w,content_h=c.content_h;

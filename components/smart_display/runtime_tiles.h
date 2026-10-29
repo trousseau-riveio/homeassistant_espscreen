@@ -105,6 +105,10 @@ static_assert(settings_screen::VISION_BG_COUNT == theme::VISION_GRADIENT_COUNT, 
 inline esphome::ESPPreferenceObject vision_preference;
 inline esphome::ESPPreferenceObject header_preference;
 inline esphome::ESPPreferenceObject soft_bg_preference;  // Soft's colours (local fork)
+// Soft's player card (local fork): the cover over the whole glass (media_card::layout_cover), switched by a tap on the
+// cover and kept across restarts.
+inline esphome::ESPPreferenceObject media_cover_preference;
+inline bool media_big_cover = false;
 static_assert(settings_screen::SOFT_BG_COUNT == theme::SOFT_PALETTE_COUNT, "a name for every Soft palette");
 // The grid chosen for each way the glass hangs (firmware 0.53.0+, regrid), lying down first.
 struct GridChoice { uint8_t columns[2], rows[2]; };
@@ -538,6 +542,9 @@ inline void load_settings() {
   soft_bg_preference = esphome::global_preferences->make_preference<uint32_t>(0x53464231);
   uint32_t soft_bg_saved=0;
   if(soft_bg_preference.load(&soft_bg_saved)&&soft_bg_saved<(uint32_t)theme::SOFT_PALETTE_COUNT)settings_screen::soft_bg=(int32_t)soft_bg_saved;
+  media_cover_preference = esphome::global_preferences->make_preference<uint32_t>(0x4D435631);
+  uint32_t media_cover_saved=0;
+  if(media_cover_preference.load(&media_cover_saved))media_big_cover=media_cover_saved==1;
   theme::soft_palette=settings_screen::soft_bg;
   uint32_t buttons_saved=1;
   if(buttons_preference.load(&buttons_saved))page_buttons=buttons_saved!=0;
@@ -627,6 +634,7 @@ struct Widgets {
   lv_obj_t *soft_track{}, *soft_knob{};
   // The card was last laid out by Soft: its own padding, letter spacing and slider place, given back when it is not.
   bool soft_drawn=false, soft_watch=false;  // soft_watch: drawn as Soft's big value
+  bool soft_media=false;  // drawn as Soft's player (soft_card.cpp): its keys take their own paint
   lv_color_t panel_accent{}, panel_text{};
   // Busy sheet: a translucent white cover with a small spinner while a command is under way.
   lv_obj_t *busy{}, *spinner{}; bool busy_drawn=false;
@@ -786,7 +794,8 @@ inline bool tile_picture_marquee_ready(const Widgets &w, const Tile &t);
 // tile since 0.3.3, on every size since 0.3.7 (the small square in the icon's place said too little to be of use).
 // A map (firmware 0.20.0) fills its card on every size too, with its name drawn into the picture by the app.
 // A favourite (firmware 0.24.0+) fills its card with what it plays on every size, as a live camera does.
-inline bool card_art(const Tile &t) {return (t.row_span()>1 && !t.full && t.cover_tile()) || t.live() || t.is_map() || (t.favorite() && t.pictured());}
+// Soft's player (local fork) keeps its cover in its own rounded square, never over the whole card.
+inline bool card_art(const Tile &t) {return (t.row_span()>1 && !t.full && t.cover_tile() && !theme::soft) || t.live() || t.is_map() || (t.favorite() && t.pictured());}
 // All icon fonts carry the same generated glyph set, so the first bound one answers for all.
 inline bool has_icon_glyph(uint32_t codepoint) {
   for (auto &w : widgets) if (w.icon_font) { lv_font_glyph_dsc_t dsc; return lv_font_get_glyph_dsc(w.icon_font, &dsc, codepoint, 0); }
@@ -833,6 +842,7 @@ inline void soft_icon(Widgets &w, const Tile &t, int circle, int y, int x = 0) {
   if (!outline.empty() && outline_face) { icon_face = outline_face; label(w.icon, outline); }
   if (lv_obj_get_style_text_font(w.icon, LV_PART_MAIN) != icon_face) set_font(w.icon, icon_face);
   lv_obj_set_size(w.circle, circle, circle); lv_obj_set_pos(w.circle, x, y); set_hidden(w.circle, false);
+  lv_obj_remove_local_style_prop(w.circle, LV_STYLE_RADIUS, LV_PART_MAIN);  // round; Soft's player squares it after
   center_icon(w.icon); tile_picture_place(w, t, circle, x, y);
 }
 // Whether a big value is all figures, which Soft's figure faces draw (soft_value_faces()); a word takes the name's face.
@@ -5259,6 +5269,11 @@ inline void media_top_bar(const Tile &t,lv_obj_t *back,lv_obj_t *heading){
   const uint32_t g=media_face.ground;
   media_dark_key(back,false,false,g);
   set_color(heading,LV_STYLE_TEXT_COLOR,theme::rgb(media_ink()));
+  // Soft (local fork): the player's name in the small face, faded: the music is what the card is about.
+  if(theme::soft&&small_font){
+    set_font(heading,small_font);lv_obj_set_height(heading,lv_font_get_line_height(small_font));
+    set_color(heading,LV_STYLE_TEXT_COLOR,theme::rgb(media_soft(g)));
+  }
   auto cb=[](lv_event_t *e){detail_command((intptr_t)lv_event_get_user_data(e));};
   const lv_font_t *icons=mini_icon_font?mini_icon_font:detail_font;
   const bool usable=fresh()&&t.available(),off=media_off(t);
@@ -5277,11 +5292,12 @@ inline void media_top_bar(const Tile &t,lv_obj_t *back,lv_obj_t *heading){
   if(x.media_sources.empty())return;
   lv_obj_add_flag(heading,LV_OBJ_FLAG_HIDDEN);
   // The pill: the speaker icon, the speaker's name (or "Choose a speaker"), the arrow of a menu.
-  const lv_font_t *font=control_font?control_font:detail_font;
+  // Soft (local fork): a slimmer pill in the small face.
+  const lv_font_t *font=theme::soft&&small_font?small_font:control_font?control_font:detail_font;
   const std::string name=x.media_source.empty()?std::string(tr(txt::media_choose_speaker)):x.media_source;
   const auto home=detail_bar::back_slot(detail_root),edge=detail_bar::right_slot(detail_root,std::max(0,right-1));
   const int bar=home.h,bar_y=home.y;
-  const int h=bar*3/4,inset=ui::px(ui::large()?14:8),icon_w=lv_font_get_line_height(icons),gap=ui::px(ui::large()?6:4);
+  const int h=theme::soft?std::max(static_cast<int>(lv_font_get_line_height(font))+ui::px(10),bar/2):bar*3/4,inset=ui::px(ui::large()?14:8),icon_w=lv_font_get_line_height(icons),gap=ui::px(ui::large()?6:4);
   // The room between the back key and the keys at the right; the pill stands in the middle of the glass where it fits
   // there, and in the middle of that room when two keys at the right leave too little (a speaker's name stays whole).
   const int lo=home.x+home.w+gap,hi=edge.x-gap,room=std::max(h,hi-lo);
@@ -5495,10 +5511,23 @@ inline void render_media_detail(Tile &t,unsigned index,bool large,int width,int 
   using namespace media_card;
   using namespace tile_controls;
   const auto &x=t.extra();
-  const Metrics m=media_metrics(large,x.media_duration);
+  Metrics m=media_metrics(large,x.media_duration);
+  // Soft (local fork): the title in the control face and the artist in the small one, and the volume row's keys the
+  // size of shuffle and repeat, so the cover has the room the words took. The big cover (media_big_cover) fills the
+  // glass from its top, under the top bar, with the rest over a shade along its foot.
+  const bool soft_look=theme::soft;
+  const bool big=soft_look&&media_big_cover&&camera_supported();
+  const lv_font_t *title_font=soft_look&&control_font?control_font:watch_font?watch_font:detail_font;
+  const lv_font_t *artist_font=soft_look&&small_font?small_font:control_font?control_font:detail_font;
+  const lv_font_t *small=small_font?small_font:detail_font;
+  if(soft_look){m.title_h=lv_font_get_line_height(title_font);m.artist_h=lv_font_get_line_height(artist_font);}
   // The volume row ends with the keys of what the player has besides: its inputs, and its library outermost.
   const bool library=x.media_library&&media_library::available(),inputs=!x.media_inputs.empty();
-  const Layout l=layout(m,width,std::max(60,height-top-(ui::px(large?12:6))),library+inputs);
+  const int foot=ui::px(large?12:6);
+  if(big)top=0;
+  const Layout l=big?layout_cover(m,width,height-foot,library+inputs)
+                 :soft_look?layout_with(m,width,std::max(60,height-top-foot),library+inputs,m.mute_h())
+                 :layout(m,width,std::max(60,height-top-foot),library+inputs);
   auto at=[&](Rect r){r.y+=top;return r;};
   const bool usable=fresh()&&t.available();
   const uint32_t f=t.supported,had=f|x.media_features;auto can=[&](uint32_t bit){return usable&&(!f||(f&bit));};
@@ -5523,9 +5552,23 @@ inline void render_media_detail(Tile &t,unsigned index,bool large,int width,int 
       card_bind(media_detail_picture,t,media_picture_paint);
     }
 #endif
+    // Soft (local fork): a tap on the cover switches the big cover on and off; the card is built again after the tap.
+    if(soft_look&&camera_supported()){
+      Rect hit=at(l.art);
+      if(big)hit.h=std::max(1,l.shade.y-hit.y);
+      auto *zone=lv_obj_create(detail_root);lv_obj_remove_style_all(zone);
+      lv_obj_set_pos(zone,hit.x,hit.y);lv_obj_set_size(zone,hit.w,hit.h);
+      lv_obj_add_flag(zone,LV_OBJ_FLAG_CLICKABLE);lv_obj_remove_flag(zone,LV_OBJ_FLAG_SCROLLABLE);
+      lv_obj_add_event_cb(zone,[](lv_event_t *){
+        media_big_cover=!media_big_cover;
+        const uint32_t saved=media_big_cover?1:0;media_cover_preference.save(&saved);
+        lv_async_call([](void *){if(detail_root&&!lv_obj_has_flag(detail_root,LV_OBJ_FLAG_HIDDEN))show_detail(detail_index);},nullptr);
+      },LV_EVENT_SHORT_CLICKED,nullptr);
+    }
   }
+  // The big cover's shade, under everything that stands over the cover.
+  if(big&&l.shade.h)set_number(media_box(detail_root,nullptr,at(l.shade),theme::hex(theme::CAMERA_PAGE),0),LV_STYLE_BG_OPA,150);
   // Title, artist · album.
-  const lv_font_t *title_font=watch_font?watch_font:detail_font,*artist_font=control_font?control_font:detail_font,*small=small_font?small_font:detail_font;
   const lv_text_align_t align=l.wide?LV_TEXT_ALIGN_LEFT:LV_TEXT_ALIGN_CENTER;
   // A title or artist line wider than the card rolls by, round and round (firmware 0.2.77+); a shorter one stands still.
   marquee(card_bind(detail_text(detail_root,"",l.title.x,l.title.y+top,l.title.w,title_font,align,ink),t,media_title_paint));
@@ -5706,6 +5749,8 @@ inline void show_detail(unsigned index){
     // "Now playing" (firmware 0.2.64+): the cover, the track, a running progress bar, round keys and the volume row, on
     // its cover's colour (worked out first: the top bar's keys stand on it too).
     render_media_detail(t,index,large,width,height,bar_y+bar+(ui::px(large?8:4)));
+    // The big cover (Soft, local fork) lies under the top bar: its back key and name come back over it.
+    lv_obj_move_foreground(back);lv_obj_move_foreground(heading);
     media_top_bar(t,back,heading);
   }else if(d=="light"||d=="fan"){
     render_light_detail(t,large,width,height,columns);
@@ -8662,6 +8707,7 @@ inline void ring_favorite(Widgets &w,const Tile &t){
   lv_obj_invalidate(w.tile);
 }
 inline void style_tall(Widgets &w,const Tile &t){
+  if(w.soft_media)return;  // Soft's player (local fork) paints its own keys (soft_media_paint)
   // A thermostat's stepper (render_tall, climate_tile.h): a grey pill with white keys on one row, or the keys alone
   // in grey beside a big number. The number is grey while the thermostat is off.
   if(tile_controls::thermostat(t)&&w.extra_mode=="tall"&&w.panel_mode=="setpoint"&&w.pill&&(w.hand_r==1||w.hand_r==2)){
@@ -8821,6 +8867,7 @@ struct SoftCard {
   int content_w, content_h;
 };
 void soft_card(Widgets &w, const Tile &t, const SoftCard &c);
+void soft_media_paint(Widgets &w);
 inline void render_slot(size_t slot) {
   swipe_profile::SlotTimer slot_timer(slot);
   swipe_profile::Lap lap;
@@ -8956,7 +9003,8 @@ inline void render_slot(size_t slot) {
                          !tile_controls::cover_tilt_selected(t) && !(w.full && d=="media_player") &&
                          !t.is_map() && !t.favorite();
   if(w.soft_drawn && !soft_layout){
-    w.soft_drawn=w.soft_watch=false;
+    w.soft_drawn=w.soft_watch=w.soft_media=false;
+    lv_obj_remove_local_style_prop(w.circle,LV_STYLE_RADIUS,LV_PART_MAIN);
     if(w.panel){end_panel(w);w.panel_mode.clear();}
     for(auto prop:{LV_STYLE_PAD_TOP,LV_STYLE_PAD_BOTTOM,LV_STYLE_PAD_LEFT,LV_STYLE_PAD_RIGHT})lv_obj_remove_local_style_prop(w.tile,prop,LV_PART_MAIN);
     for(auto *o:{w.title,w.value,w.unit})lv_obj_remove_local_style_prop(o,LV_STYLE_TEXT_LETTER_SPACE,LV_PART_MAIN);
@@ -9363,6 +9411,7 @@ inline void render_slot(size_t slot) {
   // The controls take the state's colour even while the card is grey: a closed blind's position slider stays coloured
   // (Tile::slider_active), while the slider of something off turns grey and the Off mode key has a grey of its own.
   style_panel(w,t,lv_color_hex(soft_card?theme::soft_colors().knob:theme::state(accent)),title_color);
+  if(soft_card)soft_media_paint(w);
   style_tall(w,t);
   ring_favorite(w,t);
   // Custom parts follow the card palette: text like the title, lines/dots in the accent.
@@ -11574,7 +11623,9 @@ inline bool tile_ask(const Widgets &w, const Tile &t, tile_picture::Ask &a) {
   const int width = lv_obj_get_width(place), height = lv_obj_get_height(place);
   if (width <= 0 || height <= 0) return false;
   const int radius = art ? lv_obj_get_style_radius(w.tile, LV_PART_MAIN) : width / 6;
-  const uint32_t ground = t.transparent || art ? theme::hex(theme::PAGE) : theme::surface(t.background);
+  // Soft's cards (local fork) are its palette's paper: a cover's corners are cut over that.
+  const uint32_t ground = t.transparent || art ? theme::hex(theme::PAGE) :
+                          theme::soft && !t.background && !w.key ? theme::soft_colors().card : theme::surface(t.background);
   // An album cover and a favourite carry their words on the picture, dimmed whole as a cover over a card is.
   const int shade = art && (t.cover_tile() || t.favorite()) ? tile_picture::SHADE : 0;
   // A picture over the cap sits in the middle of its card on the dark of a camera's page, which its corners round over.

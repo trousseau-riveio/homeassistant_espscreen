@@ -65,7 +65,7 @@ struct Metrics {
   // back one to one, so a square the app will not serve is a square that stays empty: an add-on that does not know
   // the size answers nothing at all, and an older add-on than this firmware never will. Raising it is a change in
   // both, and in that order.
-  static int cover_max() { return 320; }
+  static int cover_max() { return 480; }
   // A cover is a picture: on glass with room to spare it grows past the look's own size, up to a third of the width
   // or half the height, and never past what the app will hand over. Every board so far stays on max_art().
   int art_cap(int width, int height) const {
@@ -92,6 +92,9 @@ struct Layout {
   // Where a finger takes the bar to seek (firmware 0.24.0+): the bar's length, and a finger's height round its line.
   Rect seek;
   int art_radius = 0;   // the corner the art is rounded with (baked into the picture by the app)
+  // The big cover (Soft, local fork: layout_cover): the art fills the glass and the rest stands over a shade along its
+  // foot, from here to the bottom of the area. Empty in the other forms.
+  Rect shade;
 };
 
 inline int radius_for(int art) { return std::max(4, art / 12); }
@@ -225,6 +228,25 @@ inline Layout layout(const Metrics &m, int width, int height, int ends = 0) {
   if (!m.art) return l.artist ? l : layout_with(m, width, height, ends, m.mute_h());
   if (!l.wide || l.artist) return l;
   return layout_with(m, width, height, ends, m.mute_h());
+}
+
+// The big cover (Soft, local fork): the cover as large as the glass, `width` × `height` from the glass's top left, with
+// the words, the bar, the keys and the volume row (its keys the size of shuffle and repeat) stacked along its foot over
+// a shade, as a phone's lock screen shows what plays. A tap on the cover switches between this and layout().
+inline Layout layout_cover(const Metrics &m, int width, int height, int ends = 0) {
+  Metrics bare = m;
+  bare.art = false;  // the stack as a board without pictures lays it out, then moved to the foot
+  Layout l = layout_with(bare, width, height, ends, m.mute_h());
+  const int g = m.gap();
+  const int shift = std::max(0, (l.minus.y - g) - l.play.bottom());
+  for (Rect *r : {&l.title, &l.artist_line, &l.bar, &l.elapsed, &l.total, &l.prev, &l.play, &l.next, &l.shuffle, &l.repeat, &l.seek})
+    if (r->w || r->h) r->y += shift;
+  const int side = std::min({width, height, Metrics::cover_max()});
+  l.art = {(width - side) / 2, 0, side, side};
+  l.art_radius = radius_for(side);
+  const int top = std::max(0, l.title.y - 2 * g);
+  l.shade = {0, top, width, height - top};
+  return l;
 }
 
 // ---- Seeking (firmware 0.24.0+) ----

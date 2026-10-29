@@ -44,6 +44,16 @@ STATES = {
     'climate.heating': {'state': 'heat', 'attributes': {'current_temperature': 19.5, 'temperature': 21, 'hvac_action': 'heating', 'hvac_modes': ['off', 'heat', 'auto'],
                                                         'supported_features': 1}},
     'media_player.sonos': {'state': 'playing', 'attributes': {'volume_level': 0.17, 'is_volume_muted': False, 'media_title': 'Morning jazz', 'supported_features': 8321599}},
+    'media_player.spotify': {'state': 'playing', 'attributes': {
+        'volume_level': 0.42, 'is_volume_muted': False, 'media_title': 'Midnight City', 'media_artist': 'M83',
+        'media_album_name': "Hurry Up, We're Dreaming", 'media_duration': 244, 'media_position': 71,
+        'media_position_updated_at': '2026-10-28T10:00:00+00:00', 'entity_picture': '/api/media_player_proxy/media_player.spotify?cache=abc',
+        'shuffle': False, 'repeat': 'off', 'supported_features': 8321599}},
+    'media_player.paused': {'state': 'paused', 'attributes': {
+        'volume_level': 0.3, 'media_title': 'Teardrop', 'media_artist': 'Massive Attack', 'media_album_name': 'Mezzanine',
+        'media_duration': 330, 'media_position': 120, 'entity_picture': '/api/media_player_proxy/media_player.paused?cache=def',
+        'supported_features': 8321599}},
+    'media_player.idle': {'state': 'idle', 'attributes': {'volume_level': 0.3, 'supported_features': 8321599}},
     'vacuum.robot': {'state': 'docked', 'attributes': {'battery_level': 100, 'fan_speed': 'max', 'fan_speed_list': ['quiet', 'max'], 'supported_features': 30524}},
     'number.target': {'state': '55', 'attributes': {'min': 30, 'max': 70, 'step': 5, 'unit_of_measurement': '%'}},
     'select.mode': {'state': 'Comfort', 'attributes': {'options': ['Eco', 'Comfort', 'Boost']}},
@@ -61,6 +71,7 @@ WATCH = {'display': 'watch'}
 CHOSEN = ('garage', 'blinds', 'lock', 'gate')  # icons sent as chosen in the editor, to see them follow the state
 GRAPH = {'display': 'graph'}
 TOGGLE, SLIDER = {}, {'controls': 'brightness'}
+APPEARANCE = ('display', 'layout', 'subtitle')  # the options a tile's look carries; the rest are its interaction
 # (page, [(entity, name, icon, options, column, row, columns, rows)])
 PAGES = [
     ('singles', [('light.on', 'Desk lamp', 'lamp', TOGGLE, 0, 0, 1, 1), ('light.off', 'Ceiling', 'ceiling-light', TOGGLE, 1, 0, 1, 1),
@@ -115,6 +126,28 @@ PAGES = [
                    ('cover.garage', 'Garage', 'garage', {'controls': 'buttons'}, 1, 1, 1, 1), ('cover.shutter', 'Shutter', '', {'controls': 'buttons'}, 2, 1, 1, 1),
                    ('select.mode', 'Mode', '', {'controls': 'stepper'}, 0, 2, 1, 1), ('timer.eggs', 'Eggs', '', {'controls': 'buttons'}, 1, 2, 1, 1),
                    ('media_player.sonos', 'Radio', '', {'controls': 'playback'}, 2, 2, 1, 1)]),
+    ('m_mix', [('media_player.spotify', 'Spotify', '', {'controls': 'playback', 'display': 'cover'}, 0, 0, 2, 2),
+               ('media_player.paused', 'Kitchen', '', {'controls': 'playback', 'display': 'cover'}, 2, 0, 1, 1),
+               ('media_player.idle', 'Bedroom', '', {'controls': 'playback'}, 2, 1, 1, 1),
+               ('media_player.spotify', 'Office', '', {'controls': 'volume_playback', 'display': 'cover'}, 0, 2, 3, 1)]),
+    ('m_wide', [('media_player.spotify', 'Spotify', '', {'controls': 'volume_playback', 'display': 'cover'}, 0, 0, 3, 2),
+                ('media_player.paused', 'Kitchen', '', {'controls': 'playback', 'display': 'cover'}, 0, 2, 2, 1),
+                ('media_player.spotify', 'Bath', '', {'controls': 'volume', 'display': 'cover'}, 2, 2, 1, 1)]),
+    ('m_tall', [('media_player.spotify', 'Spotify', '', {'controls': 'volume_playback', 'display': 'cover'}, 0, 0, 1, 3),
+                ('media_player.paused', 'Kitchen', '', {'controls': 'volume_playback', 'display': 'cover'}, 1, 0, 2, 3)]),
+    ('m_plain', [('media_player.spotify', 'Spotify', '', {'controls': 'playback'}, 0, 0, 2, 2),
+                 ('media_player.paused', 'Kitchen', '', {'controls': 'playback'}, 2, 0, 1, 2),
+                 ('media_player.spotify', 'Office', '', {'controls': 'volume'}, 0, 2, 2, 1),
+                 ('media_player.idle', 'Bedroom', '', {'controls': 'playback'}, 2, 2, 1, 1)]),
+    ('m_opts', [('media_player.spotify', 'Standard', '', {'controls': 'playback'}, 0, 0, 2, 2),
+                ('media_player.spotify', 'No line', '', {'controls': 'playback', 'display': 'cover', 'subtitle': 'none'}, 2, 0, 1, 2),
+                ('media_player.spotify', 'No keys', '', {'controls': 'none', 'display': 'cover'}, 0, 2, 2, 1),
+                ('media_player.spotify', 'Words', '', {'controls': 'playback', 'subtitle': 'text:Kitchen'}, 2, 2, 1, 1)]),
+    ('m_opts2', [('media_player.spotify', 'Both', '', {'controls': 'volume_playback', 'display': 'cover'}, 0, 0, 2, 2),
+                 ('media_player.spotify', 'Plain', '', {'controls': 'volume_playback'}, 2, 0, 1, 3),
+                 ('media_player.spotify', 'Plain wide', '', {'controls': 'playback'}, 0, 2, 2, 1)]),
+    ('m_card', [('media_player.spotify', 'Spotify Tim Rousseau', '', {'controls': 'playback', 'display': 'cover'}, 0, 0, 2, 2)]),
+    ('m_full', [('media_player.spotify', 'Spotify', '', {'controls': 'volume_playback'}, 0, 0, 3, 3)]),
     ('c_media_full', [('media_player.sonos', 'Living room', '', {'controls': 'volume_playback'}, 0, 0, 3, 3)]),
     ('graph_full', [('sensor.graph', 'Outside temperature', '', GRAPH, 0, 0, 3, 3)]),
 ]
@@ -163,19 +196,53 @@ class Study(run.Run):
                               'placement': {'row': r, 'column': c, 'columns': w, 'rows': h},
                               'appearance': {'label': name, 'presentation': page_layout.footprint_size(w, h, grid),
                                              **({'icon': icon} if icon in CHOSEN else {}),
-                                             **{k: v for k, v in options.items() if k in ('display', 'layout')}},
-                              'interaction': {k: v for k, v in options.items() if k not in ('display', 'layout')}})
+                                             **{k: v for k, v in options.items() if k in APPEARANCE}},
+                              'interaction': {k: v for k, v in options.items() if k not in APPEARANCE}})
             pages.append({'id': f'b{page:015x}', 'navigation': {'excludeFromPagination': False},
                           'topbar': {'leading': [], 'title': {'source': 'text', 'text': title}, 'trailing': []}, 'tiles': tiles})
         record = {'format': 'pages-v2', 'sourceGrid': {'columns': 3, 'rows': 3},
                   'layout': {'title': 'Soft', 'homePageId': pages[0]['id'], 'pages': pages}}
         compiled = send_layout.compile_tiles(record['layout'], grid)
-        values = [send_layout.state_message(i, tile, states) for i, tile in enumerate(compiled)]
+        import core
+        values = [send_layout.state_message(i, tile, states, core.media_extras(states[tile['entity']]['attributes']) if tile['entity'].startswith('media_player.') else None)
+                  for i, tile in enumerate(compiled)]
         for message, tile in zip(values, compiled):
             if tile['entity'].startswith('sensor.graph'):
                 message['history'] = HISTORY
         bars = [[{'k': 'clock'}] for _ in record['layout']['pages']]
         await self.sender.synchronize(self.inbox.object_id, record, region, values, bars)
+        # Covers, as the app paints them for a tile's place (tile_picture.h): every question answered as it comes.
+        import media_art
+        import tile_art
+        calls = []
+        self.client.subscribe_service_calls(calls.append)
+        async def covers():
+            served, seen = 0, 0
+            while True:
+                for call in calls[seen:]:
+                    seen += 1
+                    data = dict(call.data)
+                    if call.service == 'esphome.screen_camera' and data.get('size') and 'tiles' not in data:
+                        # The player's card asks for its cover at a size of its own (camera_feed.encode_cover).
+                        import camera_feed
+                        body = camera_feed.encode_cover(media_art.png(1, 480), int(data['size']), int(data['bg'], 16))
+                        url = self.pictures.url(f'{self.item.key}-cover-{served}.bmp', body)
+                        served += 1
+                        await self.send({'v': 1, 'op': 'camera', 't': 'cover', 'e': data['entity'], 'u': url, 'view': int(data['view'])})
+                        continue
+                    if call.service != 'esphome.screen_camera' or 'tiles' not in data:
+                        continue
+                    entities = data['tiles'].split(',')
+                    atlas = tile_art.parse(data.get("atlas"), (4096, 4096), len(entities)) if data.get("atlas") else None
+                    if atlas is None:
+                        continue
+                    seed = 4 if 'paused' in entities[0] else 1
+                    body = tile_art.encode([media_art.png(seed)] * len(entities), [int(g, 16) for g in data['bg'].split(',')], atlas, compact=True)
+                    url = self.pictures.url(f'{self.item.key}-tile-{served}.bmp', body)
+                    served += 1
+                    await self.send({'v': 1, 'op': 'camera', 't': 'live', 'e': data['tiles'], 'u': url, 'view': int(data['view'])})
+                await asyncio.sleep(0.1)
+        asyncio.get_running_loop().create_task(covers())
         self.client.select_command(theme.key, 'Soft')
         if top_bar:
             self.client.switch_command(top_bar.key, False)
@@ -195,8 +262,26 @@ class Study(run.Run):
         for page, (name, _) in enumerate(PAGES):
             await self.call('render_page', page=page)
             await self.page_done(page)
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(3.0 if name.startswith('m_') else 0.5)  # a player's cover comes after the page
             await self.render(name, timeout=6)
+            if name == 'm_card':
+                # The player's card, opened as a finger does: a tap on the tile's words.
+                index = next(i for i, tile in enumerate(compiled) if tile['entity'].endswith(f'_p{page}_0'))
+                start = len(self.lines)
+                await self.call('render_tile_center', index=index)
+                line = await self.until(lambda l: f'tile_center index={index}' in l, 5, 'the player tile', start)
+                x, y = (int(part.split('=')[1]) for part in line.split()[-2:])
+                await self.tap(x, y)
+                await asyncio.sleep(3.0)
+                await self.render('m_card_open', timeout=6)
+                # A tap on the cover: the big cover, and a second tap back.
+                await self.tap(240, 150)
+                await asyncio.sleep(3.0)
+                await self.render('m_card_big', timeout=6)
+                await self.tap(240, 150)
+                await asyncio.sleep(1.0)
+                await self.call('render_close_cards')
+                await asyncio.sleep(0.5)
         return len(PAGES), len(PAGES)
 
 

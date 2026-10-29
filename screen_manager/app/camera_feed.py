@@ -35,7 +35,7 @@ MIN_FIRMWARE = (0, 2, 57)
 # and again only when Home Assistant's picture changes; the screen asks for a new link then.
 COVER_DOMAINS = ('media_player',)
 COVER_MIN_FIRMWARE = (0, 2, 64)
-COVER_SIZES = (48, 320)  # the smallest and largest cover a screen may ask for, in pixels
+COVER_SIZES = (48, 480)  # the smallest and largest cover a screen may ask for, in pixels
 COVER_RADIUS_SHARE = 12  # the corner is a twelfth of the size, at least 4 px (media_card.h radius_for)
 # Live pictures on camera tiles (app 0.2.91, firmware 0.2.77): a tile with "display": "live" shows a small square of its
 # camera in the icon's place. The camera tiles of a page share one image: the screen asks for them together and the
