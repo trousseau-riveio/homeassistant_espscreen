@@ -813,7 +813,7 @@ inline const lv_font_t *vision_name_face = nullptr;
 // Soft's faces: Figtree for the name and the state, small to large, its figures for a big value, and its outline icons.
 inline const lv_font_t *soft_name_s = nullptr, *soft_name_m = nullptr, *soft_name_l = nullptr;
 inline const lv_font_t *soft_state_s = nullptr, *soft_state_m = nullptr, *soft_state_l = nullptr;
-inline const lv_font_t *soft_value_s = nullptr, *soft_value_m = nullptr, *soft_value_l = nullptr;
+inline const lv_font_t *soft_value_s = nullptr, *soft_value_m = nullptr, *soft_value_l = nullptr, *soft_value_xl = nullptr, *soft_value_hero = nullptr;
 inline const lv_font_t *soft_outline_s = nullptr, *soft_outline_m = nullptr, *soft_outline_l = nullptr;
 inline std::array<const lv_font_t *, 3> soft_name_faces() { return {soft_name_s, soft_name_m, soft_name_l}; }
 inline std::array<const lv_font_t *, 3> soft_state_faces() { return {soft_state_s, soft_state_m, soft_state_l}; }
@@ -822,8 +822,8 @@ inline std::array<const lv_font_t *, 3> soft_icon_faces() { return {soft_outline
 // Soft (local fork): a card the look's own layout draws (a thermostat with its modes, a blind with its slats, a player
 // over the whole page) still writes in Soft's faces, the one whose line is nearest the look's own; a board without them
 // (placeholders of 8 px) keeps the look's.
-inline const lv_font_t *soft_like(const lv_font_t *font, const std::array<const lv_font_t *, 3> &faces) {
-  if (!theme::soft || !font) return font;
+inline const lv_font_t *nearest_face(const lv_font_t *font, const std::array<const lv_font_t *, 3> &faces) {
+  if (!font) return font;
   const int want = lv_font_get_line_height(font);
   const lv_font_t *best = nullptr;
   int off = 1 << 30;
@@ -834,6 +834,30 @@ inline const lv_font_t *soft_like(const lv_font_t *font, const std::array<const 
   }
   return best ? best : font;
 }
+inline const lv_font_t *soft_like(const lv_font_t *font, const std::array<const lv_font_t *, 3> &faces) {
+  return theme::soft ? nearest_face(font, faces) : font;
+}
+// The board's text faces in Soft's (local fork) for the cards it draws its own way: words in the state's face, the
+// bold ones in the name's, figures in its figures' (soft_figures: digits, signs and the degree).
+inline const lv_font_t *soft_text(const lv_font_t *font) { return soft_like(font, soft_state_faces()); }
+inline const lv_font_t *soft_bold(const lv_font_t *font) { return soft_like(font, soft_name_faces()); }
+inline const lv_font_t *soft_figure(const lv_font_t *font) { return soft_like(font, soft_value_faces()); }
+// Soft's clocks (local fork): Figtree's figures, from the clock's own display size down, where the board has them.
+inline bool soft_digits() { return theme::soft && soft_value_l && lv_font_get_line_height(soft_value_l) > 12; }
+inline const lv_font_t *soft_xl() { return soft_value_xl && lv_font_get_line_height(soft_value_xl) > 12 ? soft_value_xl : soft_value_l; }
+// Soft's big value beyond its three steps (local fork): the clock's figures, then the hero's, largest first; the ones the
+// board has.
+inline std::array<const lv_font_t *, 2> soft_big_figures() {
+  auto real = [](const lv_font_t *f) { return f && lv_font_get_line_height(f) > 12 ? f : nullptr; };
+  return {real(soft_value_xl), real(soft_value_hero)};
+}
+// The board's shared faces as it handed them over, kept while Soft has its own in their place (soft_faces_follow).
+struct SharedFaces { const lv_font_t *watch, *control, *small, *label, *setpoint, *clock, *bar_title, *pager; };
+inline SharedFaces own_faces{};
+inline bool own_faces_kept = false;
+// A card's name and state as the look writes them: its own faces, Soft's nearest in Soft.
+inline const lv_font_t *card_title_font(const Widgets &w) { return soft_like(w.title_font, soft_name_faces()); }
+inline const lv_font_t *card_value_font(const Widgets &w) { return soft_like(w.value_font, soft_state_faces()); }
 // The outline twin of a four-byte Material Design icon as UTF-8, or empty where there is none.
 inline std::string soft_outline(const char *utf8) {
   if (!utf8 || strlen(utf8) != 4) return {};
@@ -1692,6 +1716,7 @@ inline bool wish_unanswered(const std::string &target) {
   return any;
 }
 inline const lv_font_t *detail_font=nullptr;
+inline const lv_font_t *detail_font_own=nullptr;  // the look's own, which detail_font is in every look but Soft
 inline lv_obj_t *detail_actions[32]{};
 inline unsigned detail_action_count=0;
 inline lv_obj_t *detail_status=nullptr;
@@ -2090,9 +2115,9 @@ inline uint32_t weather_page_shown(){return (uint32_t)weather_view;}
 // The chart's faces, from the smallest step up: the look's fonts, never a size of the chart's own.
 inline weather_chart::Fonts weather_fonts(){
   const lv_font_t *icon=widgets[0].icon_font?widgets[0].icon_font:mini_icon_font;
-  const lv_font_t *small=small_font?small_font:detail_font,*mini=mini_icon_font?mini_icon_font:icon,*tiny=watch_icon_font?watch_icon_font:mini;
-  const lv_font_t *bold=label_font?label_font:detail_font,*big_text=control_font?control_font:small;
-  const lv_font_t *head=watch_font?watch_font:bold,*value=watch_value_font?watch_value_font:head;
+  const lv_font_t *small=soft_text(small_font?small_font:detail_font),*mini=mini_icon_font?mini_icon_font:icon,*tiny=watch_icon_font?watch_icon_font:mini;
+  const lv_font_t *bold=soft_bold(label_font?label_font:detail_font),*big_text=soft_text(control_font?control_font:small);
+  const lv_font_t *head=soft_bold(watch_font?watch_font:bold),*value=soft_figure(watch_value_font?watch_value_font:head);
   weather_chart::Fonts f;
   f.levels[0]={small,tiny,tiny,bold,small,small};
   f.levels[1]={small,mini,tiny,bold,small,small};
@@ -3521,7 +3546,8 @@ inline void climate_limit_paint(lv_obj_t *key,const Tile &t,const CardPart &part
 // A mode key (value: its mode), in Home Assistant's colour for its mode while it is the one in use.
 inline void climate_mode_paint(lv_obj_t *key,const Tile &t,const CardPart &part){
   const bool selected=!tile_controls::climate_off(t)&&part.value==tile_controls::current_mode(t);
-  const uint32_t colour=tile_controls::humidifier(t)?tile_controls::accent(t):tile_controls::mode_color(part.value);
+  // Soft (local fork): the mode in use in the palette's accent, as on its tiles.
+  const uint32_t colour=theme::soft?theme::soft_colors().knob:tile_controls::humidifier(t)?tile_controls::accent(t):tile_controls::mode_color(part.value);
   set_color(key,LV_STYLE_BG_COLOR,selected?lv_color_hex(colour):theme::color(theme::CARD));
   set_number(key,LV_STYLE_BORDER_WIDTH,selected?0:1);
   if(auto *glyph=lv_obj_get_child(key,0))set_color(glyph,LV_STYLE_TEXT_COLOR,theme::color(selected?theme::ON_ACCENT:theme::SLATE));
@@ -5690,7 +5716,8 @@ inline void show_detail(unsigned index){
   detail_index=index;
   // The card's own font is the tile title's as the look gave it (style_title), not the one the first cell wears right
   // now: a wide name there switches to another step, and this is kept for every card that opens after it.
-  if(!detail_font)detail_font=widgets[0].title_font?widgets[0].title_font:lv_obj_get_style_text_font(widgets[0].title,LV_PART_MAIN);
+  if(!detail_font_own)detail_font_own=widgets[0].title_font?widgets[0].title_font:lv_obj_get_style_text_font(widgets[0].title,LV_PART_MAIN);
+  detail_font=soft_bold(detail_font_own);  // Soft's nearest face in Soft (local fork)
   if(!detail_root){
     // The backdrop covers the page; the card itself is only as wide as a hand spans (overlay_card).
     detail_backdrop=lv_obj_create(lv_screen_active());lv_obj_remove_style_all(detail_backdrop);
@@ -6759,8 +6786,9 @@ inline lv_obj_t *digit_label(Widgets &w,unsigned i,const lv_font_t *font,int x,i
 // the room, with the date if it fits too; the long date first, then the short one.
 struct ClockText{const lv_font_t *font=nullptr;std::string date;int width=0,height=0,digits=0,gap=0;};
 inline ClockText face_text(Widgets &w,const esphome::ESPTime &now,bool large,int room_w,int room_h,bool want_date=true){
-  const lv_font_t *fonts[]={clock_font,watch_value_font,watch_font,w.value_font};
-  const lv_font_t *small=w.value_font;
+  const bool soft=soft_digits();
+  const lv_font_t *fonts[]={soft?soft_value_l:clock_font,soft?soft_value_m:watch_value_font,soft?soft_value_s:watch_font,card_value_font(w)};
+  const lv_font_t *small=card_value_font(w);
   const std::string time=time_text(now),ampm=am_pm(now);
   int small_top,small_h;digit_box(small,small_top,small_h);
   const std::string dates[]={date_text(now),fill(fill(txt::date_day_month,"day",now.is_valid()?std::to_string(now.day_of_month):"--"),"month",month_short(now))};
@@ -6781,7 +6809,7 @@ inline ClockText face_text(Widgets &w,const esphome::ESPTime &now,bool large,int
 }
 // Place a ClockText with its left edge (align left) or its middle (centred) at x, its top at y.
 inline void place_face_text(Widgets &w,const ClockText &c,const esphome::ESPTime &now,int x,int y,int room_w,bool centred){
-  const lv_font_t *small=w.value_font;
+  const lv_font_t *small=card_value_font(w);
   const std::string time=time_text(now),ampm=am_pm(now);
   const int tw=text_width(time,c.font),aw=ampm.empty()?0:ui::px(4)+text_width(ampm,small);
   const int tx=centred?x+(room_w-(tw+aw))/2:x;
@@ -6825,7 +6853,7 @@ inline void render_calm_dial(Widgets &w,const Tile &t,bool large,int width,int h
     Plan p;p.text=face_text(w,now,large,width,height-side*60/100-gap);
     if(!p.text.font)return p;
     // Under the dial the date's letters below the line count too, or they touch the card's edge.
-    const int below=p.text.date.empty()?0:w.value_font->base_line;
+    const int below=p.text.date.empty()?0:card_value_font(w)->base_line;
     p.dial=airy(std::min(width,height-p.text.height-below-gap));
     const int top=(height-p.dial-gap-p.text.height-below)/2;
     p.cx=width/2;p.cy=top+p.dial/2;p.ty=top+p.dial+gap;p.room=width;p.centred=true;
@@ -6874,9 +6902,11 @@ inline void render_calm_dial(Widgets &w,const Tile &t,bool large,int width,int h
 // card's. A card takes the largest one that fits (largest_digits) and never brings a size of its own
 // (tests/test_font_set.py).
 inline std::array<const lv_font_t *,3> digit_steps(){return {display_font,setpoint_font,clock_font};}
+// Soft's steps (local fork): its figures, from the clock's display size down.
+inline std::array<const lv_font_t *,3> soft_digit_steps(){return {soft_xl(),soft_value_l,soft_value_m};}
 // The largest digit step whose digits are at most `height` tall and whose `text` is at most `width` wide; null if none.
 inline const lv_font_t *largest_digits(const char *text,int width,int height){
-  for(const lv_font_t *f:digit_steps()){
+  for(const lv_font_t *f:soft_digits()?soft_digit_steps():digit_steps()){
     if(!f)continue;int top,h;digit_box(f,top,h);
     if(h<=height && text_width(text,f)<=width)return f;
   }
@@ -6886,6 +6916,7 @@ inline const lv_font_t *largest_digits(const char *text,int width,int height){
 // the display step; the 8 px place holder a board without its own step keeps is never drawn.
 inline const lv_font_t *bedside_digits(){
   if(bedside_font && (!display_font || lv_font_get_line_height(bedside_font)>lv_font_get_line_height(display_font)))return bedside_font;
+  if(soft_digits())return soft_xl();  // Soft's figures at the display step (local fork)
   return display_font?display_font:setpoint_font?setpoint_font:clock_font;
 }
 // A card that only switches (a lamp, a switch, a fan) or only runs (a script, a scene, a button), with no other control
@@ -6904,8 +6935,9 @@ inline void render_flip(Widgets &w,const Tile &t,bool large,int width,int height
     snprintf(mm,sizeof(mm),"%02d",now.minute);
   }
   const std::string ampm=am_pm(now);
-  const lv_font_t *small=w.value_font,*bold=w.title_font?w.title_font:w.value_font;
-  const lv_font_t *fonts[]={setpoint_font,clock_font,watch_value_font,watch_font,w.value_font};
+  const lv_font_t *small=card_value_font(w),*bold=w.title_font?card_title_font(w):small;
+  const bool soft=soft_digits();
+  const lv_font_t *fonts[]={soft?soft_xl():setpoint_font,soft?soft_value_l:clock_font,soft?soft_value_m:watch_value_font,soft?soft_value_s:watch_font,small};
   int stop,sh;digit_box(small,stop,sh);
   const int aw=ampm.empty()?0:text_width(ampm,small);
   // A card as wide as two columns and two rows or more, or a whole page (firmware 0.17.0+): the two blocks share its
@@ -7014,6 +7046,14 @@ inline void paint_face(Widgets &w,lv_color_t ink,lv_color_t muted,lv_color_t acc
     if(flip){set_color(p,LV_STYLE_BG_COLOR,i==4||i==5?card:block);continue;}
     // The calm dial is the card turned round: a disc in the ink's colour, its strokes and hour hand in the card's
     // (dark on a light card, light on a dark one), so it stands out instead of fading into the card.
+    // Soft (local fork) keeps the dial light: a disc in the palette's circle, the strokes and the hour hand in ink, the
+    // minute hand, the second hand and the middle in the accent.
+    if(theme::soft){
+      const lv_color_t disc=lv_color_hex(theme::soft_colors().circle),knob=lv_color_hex(theme::soft_colors().knob);
+      if(lv_obj_check_type(p,&lv_line_class))set_color(p,LV_STYLE_LINE_COLOR,i==18||i==13?knob:ink);
+      else set_color(p,LV_STYLE_BG_COLOR,i==19?disc:i==14?knob:muted);
+      continue;
+    }
     if(lv_obj_check_type(p,&lv_line_class))set_color(p,LV_STYLE_LINE_COLOR,i==18?lv_color_hex(theme::foreground(theme::ha::ALARM)):i==13?accent:card);
     else set_color(p,LV_STYLE_BG_COLOR,i==19?ink:i==14?accent:muted);
   }
@@ -7152,15 +7192,16 @@ inline void render_clock(Widgets &w,const Tile &t,bool large,int width,int heigh
   bool analog=t.display=="analog";
   begin_extra(w,analog?(w.wide?"analog":"calendar"):"digital",width,height);
   auto now=now_time?now_time():esphome::ESPTime{};
-  const lv_font_t *big=clock_font?clock_font:watch_value_font?watch_value_font:w.value_font;
+  const bool soft=soft_digits();
+  const lv_font_t *big=soft?soft_value_l:clock_font?clock_font:watch_value_font?watch_value_font:card_value_font(w);
   // The card's own name font, not the name label's: a card that showed a centred name before (a tall on/off card)
   // left its label in that card's font, and a card reused for another page kept it (firmware 0.3.2).
-  const lv_font_t *small=w.title_font;
+  const lv_font_t *small=card_title_font(w);
   // The time beside a wide dial: on a card lower than the clock's own line (a fine grid, firmware 0.53.0+) the largest
   // step whose line fits.
   const lv_font_t *time_font=big;
   if(lv_font_get_line_height(big)>height)
-    for(auto *f:{watch_value_font,watch_font,w.value_font})if(f && lv_font_get_line_height(f)<=height){time_font=f;break;}
+    for(auto *f:{soft?soft_value_m:watch_value_font,soft?soft_value_s:watch_font,card_value_font(w)})if(f && lv_font_get_line_height(f)<=height){time_font=f;break;}
   // The date line only appears when both lines fit the card height.
   bool with_date=lv_font_get_line_height(time_font)+2+lv_font_get_line_height(small)<=height;
   int text_h=lv_font_get_line_height(time_font)+(with_date?2+lv_font_get_line_height(small):0);
@@ -7192,12 +7233,12 @@ inline void render_clock(Widgets &w,const Tile &t,bool large,int width,int heigh
   if(!w.full && !w.wide){
     int room=width-dial-(ui::px(large?10:6)),need=0;lv_point_t sz;
     if(large){
-      lv_text_get_size(&sz,weekday_text(now).c_str(),w.value_font,0,0,LV_COORD_MAX,LV_TEXT_FLAG_EXPAND);need=sz.x;
+      lv_text_get_size(&sz,weekday_text(now).c_str(),card_value_font(w),0,0,LV_COORD_MAX,LV_TEXT_FLAG_EXPAND);need=sz.x;
       std::string day_probe=now.is_valid()?std::to_string(now.day_of_month):"--";
       lv_point_t d,m;lv_text_get_size(&d,day_probe.c_str(),big,0,0,LV_COORD_MAX,LV_TEXT_FLAG_EXPAND);lv_text_get_size(&m,month_short(now).c_str(),small,0,0,LV_COORD_MAX,LV_TEXT_FLAG_EXPAND);
       need=std::max<int>(need,d.x+6+m.x);
     }else{
-      const lv_font_t *font=watch_value_font?watch_value_font:w.value_font;
+      const lv_font_t *font=watch_value_font?watch_value_font:card_value_font(w);
       std::string day_probe=now.is_valid()?std::to_string(now.day_of_month):"--";
       lv_text_get_size(&sz,fill(fill(txt::date_day_month,"day",day_probe),"month",month_short(now)).c_str(),font,0,0,LV_COORD_MAX,LV_TEXT_FLAG_EXPAND);need=sz.x;
     }
@@ -7207,7 +7248,7 @@ inline void render_clock(Widgets &w,const Tile &t,bool large,int width,int heigh
   // Numerals replace the four cardinal strokes on a dial with room for them (firmware 0.35.0): the 12 and the 3 stand a
   // ring's radius apart either way, so a ring shorter than a numeral's box (a 4-inch with four rows) puts them on top
   // of each other, and the dial keeps its strokes instead.
-  const int numeral_box=lv_font_get_line_height(w.value_font)+4,numeral_ring=outer-11;
+  const int numeral_box=lv_font_get_line_height(card_value_font(w))+4,numeral_ring=outer-11;
   const bool numerals=large && numeral_ring>=numeral_box+ui::px(2);
   for(int i=0;i<12;++i){
     float a=i*3.14159265f/6;bool cardinal=i%3==0;
@@ -7215,7 +7256,7 @@ inline void render_clock(Widgets &w,const Tile &t,bool large,int width,int heigh
     // Its successor is made below without a colour; the palette pass paints it (cached_active, as the dial does).
     if(cardinal && w.parts[i] && lv_obj_check_type(w.parts[i],&lv_label_class)!=numerals){lv_obj_delete(w.parts[i]);w.parts[i]=nullptr;w.cached_active=-1;}
     if(cardinal && numerals){
-      part_label(w,i,w.value_font,cx+std::lround(numeral_ring*sinf(a))-numeral_box/2,cy-std::lround(numeral_ring*cosf(a))-numeral_box/2,
+      part_label(w,i,card_value_font(w),cx+std::lround(numeral_ring*sinf(a))-numeral_box/2,cy-std::lround(numeral_ring*cosf(a))-numeral_box/2,
                  numeral_box,LV_TEXT_ALIGN_CENTER,i==0?"12":std::to_string(i));
       continue;
     }
@@ -7253,7 +7294,7 @@ inline void render_clock(Widgets &w,const Tile &t,bool large,int width,int heigh
   int x=dial+(ui::px(large?10:6)),room=std::max(1,width-x);
   if(!large){
     // Compact cards: "13 sep" in the large-value font beside the dial, in the language's order (screen.date.day_month).
-    const lv_font_t *font=watch_value_font?watch_value_font:w.value_font;
+    const lv_font_t *font=watch_value_font?watch_value_font:card_value_font(w);
     part_label(w,16,font,x,std::max(0,int(height-lv_font_get_line_height(font))/2),room,LV_TEXT_ALIGN_CENTER,
                fill(fill(txt::date_day_month,"day",day),"month",month_short(now)));
     return;
@@ -7263,13 +7304,13 @@ inline void render_clock(Widgets &w,const Tile &t,bool large,int width,int heigh
   // together taller than the cell and the number was cut off at the bottom. The weekday goes first, then the
   // number takes the smaller font; the day and the month never go, they are what a calendar is for.
   const lv_font_t *day_font=big;
-  int week_h=lv_font_get_line_height(w.value_font);
+  int week_h=lv_font_get_line_height(card_value_font(w));
   bool with_weekday=week_h+lv_font_get_line_height(day_font)<=height;
-  if(!with_weekday && lv_font_get_line_height(day_font)>height)day_font=w.value_font;
+  if(!with_weekday && lv_font_get_line_height(day_font)>height)day_font=card_value_font(w);
   if(!with_weekday)week_h=0;
   if(w.parts[15])set_hidden(w.parts[15],!with_weekday);
   int top=std::max(0,int(height-week_h-lv_font_get_line_height(day_font))/2);
-  if(with_weekday)part_label(w,15,w.value_font,x,top,room,LV_TEXT_ALIGN_CENTER,weekday_text(now));
+  if(with_weekday)part_label(w,15,card_value_font(w),x,top,room,LV_TEXT_ALIGN_CENTER,weekday_text(now));
   std::string month=month_short(now);
   lv_point_t day_size,month_size;
   lv_text_get_size(&day_size,day.c_str(),day_font,0,0,LV_COORD_MAX,LV_TEXT_FLAG_EXPAND);
@@ -7312,9 +7353,9 @@ inline lv_obj_t *part_bar(Widgets &w,unsigned i,int x,int y,int width,int height
 // card then keeps the forecast's own forms.
 inline bool render_week(Widgets &w,const Tile &t,bool large,int width,int height){
   const Extra &x=t.extra();
-  const lv_font_t *bold=w.title_font?w.title_font:lv_obj_get_style_text_font(w.title,LV_PART_MAIN),*text=w.value_font;
-  const lv_font_t *temp_font=watch_value_font?watch_value_font:bold,*hero_font=setpoint_font?setpoint_font:temp_font;
-  const lv_font_t *line_font=control_font?control_font:text;
+  const lv_font_t *bold=soft_bold(w.title_font?w.title_font:lv_obj_get_style_text_font(w.title,LV_PART_MAIN)),*text=soft_text(w.value_font);
+  const lv_font_t *temp_font=soft_figure(watch_value_font?watch_value_font:bold),*hero_font=soft_figure(setpoint_font?setpoint_font:temp_font);
+  const lv_font_t *line_font=soft_text(control_font?control_font:text);
   const int circle=w.base_circle>0?w.base_circle:ui::px(large?54:36),gap=ui::px(large?10:6);
   const uint32_t ink=theme::hex(theme::INK),muted=theme::hex(theme::MUTED);
   const uint32_t sky=t.available()?weather_color_raw(t.state):theme::STATE_OFF;
@@ -7358,9 +7399,11 @@ inline bool render_week(Widgets &w,const Tile &t,bool large,int width,int height
   // The head: the circle in the condition's colour with its icon, as on every other card.
   const int disc_y=low?(height-std::min(circle,height))/2:0;
   auto *disc=show(part_dot(w,0,0,disc_y,std::min(circle,height)));
-  set_color(disc,LV_STYLE_BG_COLOR,lv_color_hex(t.available()?theme::tint(sky,38):theme::hex(theme::TRACK)));
+  // Soft (local fork): its circle and its accent, as every Soft card's head.
+  set_color(disc,LV_STYLE_BG_COLOR,lv_color_hex(theme::soft?theme::soft_colors().circle:t.available()?theme::tint(sky,38):theme::hex(theme::TRACK)));
   const int gh=line_of(w.icon_font);
-  words(1,w.icon_font,0,disc_y+(std::min(circle,height)-gh)/2,std::min(circle,height),LV_TEXT_ALIGN_CENTER,t.available()?weather_icon(t.state):"\U000F0595",t.available()?theme::icon(sky):theme::hex(theme::OFF));
+  words(1,w.icon_font,0,disc_y+(std::min(circle,height)-gh)/2,std::min(circle,height),LV_TEXT_ALIGN_CENTER,t.available()?weather_icon(t.state):"\U000F0595",
+        !t.available()?theme::hex(theme::OFF):theme::soft?theme::soft_colors().knob:theme::icon(sky));
   const int th=line_of(bold),nh=line_of(text),hy=(circle-th-nh)/2;
   if(low){
     const int c0=std::min(circle,height)+gap,tfh=line_of(tf);
@@ -7410,9 +7453,9 @@ inline void render_forecast(Widgets &w,const Tile &t,bool large,int width,int he
   // The week (render_week) on every card it fits; the forms below where it fits nowhere.
   if(render_week(w,t,large,width,height))return;
   const auto &x=t.extra();const auto &days=x.forecast;
-  const lv_font_t *bold=w.title_font?w.title_font:lv_obj_get_style_text_font(w.title,LV_PART_MAIN),*text=w.value_font;
+  const lv_font_t *bold=soft_bold(w.title_font?w.title_font:lv_obj_get_style_text_font(w.title,LV_PART_MAIN)),*text=soft_text(w.value_font);
   const lv_font_t *mini=mini_icon_font?mini_icon_font:w.icon_font;
-  const lv_font_t *faces[ft::FACES]={setpoint_font,watch_value_font,watch_font};
+  const lv_font_t *faces[ft::FACES]={soft_figure(setpoint_font),soft_figure(watch_value_font),soft_figure(watch_font)};
   char now_text[16];
   if(std::isfinite(t.current))snprintf(now_text,sizeof(now_text),"%.0f°",t.current);else snprintf(now_text,sizeof(now_text),"--");
   ft::Metrics m;m.large=large;
@@ -7454,11 +7497,11 @@ inline void render_forecast(Widgets &w,const Tile &t,bool large,int width,int he
   const uint32_t sky=t.available()?weather_color_raw(t.state):theme::STATE_OFF;
   if(!l.circle.empty()){
     auto *disc=show(part_dot(w,0,l.circle.x,l.circle.y,l.circle.w));
-    set_color(disc,LV_STYLE_BG_COLOR,lv_color_hex(t.available()?theme::tint(sky,38):theme::hex(theme::TRACK)));
+    set_color(disc,LV_STYLE_BG_COLOR,lv_color_hex(theme::soft?theme::soft_colors().circle:t.available()?theme::tint(sky,38):theme::hex(theme::TRACK)));
     const lv_font_t *glyph=l.circle.w>=m.circle||!mini_icon_font?w.icon_font:mini_icon_font;
     const int gh=lv_font_get_line_height(glyph);
     paint(show(part_label(w,1,glyph,l.circle.x,l.circle.y+(l.circle.h-gh)/2,l.circle.w,LV_TEXT_ALIGN_CENTER,t.available()?weather_icon(t.state):"\U000F0595")),
-          t.available()?theme::icon(sky):theme::hex(theme::OFF));
+          !t.available()?theme::hex(theme::OFF):theme::soft?theme::soft_colors().knob:theme::icon(sky));
   }
   if(l.face>=0){
     words(2,faces[l.face],l.temp,LV_TEXT_ALIGN_LEFT,now_text,ink);
@@ -7541,16 +7584,16 @@ inline void render_graph(Widgets &w,const Tile &t,bool large,int x,int y,int wid
 // position (or below the horizon at night). Wide cards only.
 inline void render_sunpath(Widgets &w,const Tile &t,bool large,int width,int height) {
   begin_extra(w,"sunpath",width,height);
-  const lv_font_t *title_font=w.title_font;  // the card's own, as in render_clock
-  int title_h=lv_font_get_line_height(title_font),text_h=lv_font_get_line_height(w.value_font);
+  const lv_font_t *title_font=card_title_font(w),*text_font=card_value_font(w);  // the card's own (Soft's in Soft)
+  int title_h=lv_font_get_line_height(title_font),text_h=lv_font_get_line_height(text_font);
   // The sun's glow is the widest thing on the path: the path keeps half of it from either side of the card, so the sun at
   // rise or set (and clamped there at night) stays inside it (firmware 0.2.104; the standard look's glow is 30 px against
   // a 14 px margin, and stuck out a pixel).
   const int size=ui::px(large?18:10),glow=size+(ui::px(large?12:6));
   int horizon=height-text_h-(ui::px(large?4:2)),top=title_h+(ui::px(large?4:2)),x0=std::max(ui::px(large?14:8),(glow+1)/2),x1=width-x0;
   part_label(w,0,title_font,0,0,width,LV_TEXT_ALIGN_LEFT,t.name.empty()?std::string(tr(txt::sun_name)):t.name);
-  part_label(w,1,w.value_font,0,horizon+(ui::px(large?3:1)),width/2,LV_TEXT_ALIGN_LEFT,fill(txt::sun_rise,"time",screen_text::clock_text(t.extra().sunrise,screen_settings::current.clock_24h!=0,true)));
-  part_label(w,2,w.value_font,width/2,horizon+(ui::px(large?3:1)),width/2,LV_TEXT_ALIGN_RIGHT,fill(txt::sun_set,"time",screen_text::clock_text(t.extra().sunset,screen_settings::current.clock_24h!=0,true)));
+  part_label(w,1,text_font,0,horizon+(ui::px(large?3:1)),width/2,LV_TEXT_ALIGN_LEFT,fill(txt::sun_rise,"time",screen_text::clock_text(t.extra().sunrise,screen_settings::current.clock_24h!=0,true)));
+  part_label(w,2,text_font,width/2,horizon+(ui::px(large?3:1)),width/2,LV_TEXT_ALIGN_RIGHT,fill(txt::sun_set,"time",screen_text::clock_text(t.extra().sunset,screen_settings::current.clock_24h!=0,true)));
   auto now=now_time?now_time():esphome::ESPTime{};
   int rise=minutes_of(t.extra().sunrise),set=minutes_of(t.extra().sunset),minute=now.is_valid()?now.hour*60+now.minute:-1;
   bool day=t.state=="above_horizon";float fraction=0.5f;
@@ -7588,8 +7631,6 @@ inline climate_tile::Metrics bar_metrics(const PanelMetrics &m,bool large){
 }
 inline void draw_mode_bar(Widgets &w,const Tile &t,lv_obj_t *parent,lv_obj_t *&track,lv_obj_t **segments,climate_tile::Rect bar,
                           int room,const climate_tile::Metrics &cm,bool large);
-inline const lv_font_t *card_title_font(const Widgets &w) { return soft_like(w.title_font, soft_name_faces()); }
-inline const lv_font_t *card_value_font(const Widgets &w) { return soft_like(w.value_font, soft_state_faces()); }
 inline PanelMetrics panel_metrics(bool large) {
   return large ? PanelMetrics{ui::px(60), ui::px(46), ui::px(14), ui::px(8), ui::px(196), ui::px(52), ui::px(140), ui::px(44), ui::px(76), ui::px(40), ui::px(22), ui::px(8), ui::px(4)} : PanelMetrics{ui::px(40), ui::px(34), ui::px(9), ui::px(4), ui::px(128), ui::px(36), ui::px(90), ui::px(30), ui::px(48), ui::px(26), ui::px(14), ui::px(6), ui::px(6)};
 }
@@ -9485,7 +9526,7 @@ inline void render_slot(size_t slot) {
     bool muted=w.extra_mode=="sunpath" ? i>=1 : w.extra_mode=="calendar" ? i==15||i==17 : w.extra_mode=="digital" ? i==16||i==17 : i==16;
     if(lv_obj_check_type(p,&lv_label_class))set_color(p,LV_STYLE_TEXT_COLOR,muted?value_color:title_color);
     else if(w.extra_mode=="sunpath")continue;
-    else if(lv_obj_check_type(p,&lv_line_class))set_color(p,LV_STYLE_LINE_COLOR,w.extra_mode=="graph"?color:i==18?lv_color_hex(theme::foreground(theme::ha::ALARM)):i<12?value_color:i==13?icon_color:title_color);
+    else if(lv_obj_check_type(p,&lv_line_class))set_color(p,LV_STYLE_LINE_COLOR,w.extra_mode=="graph"?color:i==18?lv_color_hex(theme::soft?theme::soft_colors().knob:theme::foreground(theme::ha::ALARM)):i<12?value_color:i==13?icon_color:title_color);
     else set_color(p,LV_STYLE_BG_COLOR,i==14?icon_color:value_color);
   }
   lap(swipe_profile::PALETTE);
@@ -9997,6 +10038,11 @@ inline void ota_draw() {
 inline void render(lv_obj_t *room) {
   if (!enabled) return;
   room_label=room; swipe_profile::Lap lap;
+  // The top bar's name in Soft's face while Soft is the look (local fork, soft_faces_follow), the board's after it.
+  if (room && own_faces_kept && own_faces.watch) {
+    const lv_font_t *want = theme::soft ? nearest_face(own_faces.watch, soft_name_faces()) : own_faces.watch;
+    if (lv_obj_get_style_text_font(room, LV_PART_MAIN) != want) lv_obj_set_style_text_font(room, want, 0);
+  }
   ota_status::watch();
   ota_status::draw = ota_draw;
   if (const auto wifi = wifi_status::problem(); wifi.shown) {
@@ -11004,8 +11050,26 @@ inline void page_glass() {
   }
 }
 inline int applied_header=-1;
+// Soft (local fork) writes every card, every page a tap opens and their bars in its own faces: while it is the look the
+// board's shared faces (the headline, the words of controls and their small words, a tile's name, a card's heading,
+// the pager's words, a setpoint's and a clock card's figures) are Soft's nearest, and the board's own again after it.
+// A board without Soft's faces (the compact look) keeps its own: nearest_face finds none.
+inline void soft_faces_follow(bool on) {
+  if (!own_faces_kept) {
+    if (!control_font) return;  // before the board handed its faces over (packages/core.yaml, on_boot)
+    own_faces = {watch_font, control_font, small_font, label_font, setpoint_font, clock_font, detail_bar::title_font, page_bar::words_font};
+    own_faces_kept = true;
+  }
+  const auto &o = own_faces;
+  const auto names = soft_name_faces(), states = soft_state_faces(), figures = soft_value_faces();
+  auto pick = [&](const lv_font_t *font, const std::array<const lv_font_t *, 3> &faces) { return on ? nearest_face(font, faces) : font; };
+  watch_font = pick(o.watch, names); control_font = pick(o.control, states); small_font = pick(o.small, states);
+  label_font = pick(o.label, names); setpoint_font = pick(o.setpoint, figures); clock_font = pick(o.clock, figures);
+  detail_bar::title_font = pick(o.bar_title, names); page_bar::words_font = pick(o.pager, states);
+}
 inline bool theme_changed() {
   const int now=std::clamp<int>(settings_screen::theme,0,3), head=header_shown()?1:0;
+  soft_faces_follow(now==3);
   // Soft's colours repaint the page and its cards whenever they change (theme::set_soft_palette), whatever else does.
   theme::set_soft_palette(settings_screen::soft_bg);
   if(applied_theme==now && applied_header==head)return false;

@@ -23,7 +23,7 @@ MARK = {'brand_wordmark'}
 # name, Soft's Figtree in three steps for the name, the state and a big value, and its outline icons. The standard look
 # carries them; the compact look, a 4 MB board's, has no room for them.
 LOOKS = {'materialdesign_icons_glow', 'vision_label', 'soft_name_s', 'soft_name_m', 'soft_name_l', 'soft_state_s',
-         'soft_state_m', 'soft_state_l', 'soft_value_s', 'soft_value_m', 'soft_value_l', 'soft_outline_icons',
+         'soft_state_m', 'soft_state_l', 'soft_value_s', 'soft_value_m', 'soft_value_l', 'soft_value_xl', 'soft_value_hero', 'soft_outline_icons',
          'soft_outline_icons_mini', 'soft_outline_icons_big'}
 
 

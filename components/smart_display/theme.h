@@ -309,7 +309,9 @@ inline bool soft_role(Role role, uint32_t &out) {
     case STEPPER_KEY: out = p.card; return true;
     case INK: out = p.ink; return true;
     case MUTED: out = p.muted; return true;
-    case ACCENT: out = p.knob; return true;
+    case ACCENT: case ACCENT_BRIGHT: case ACCENT_ICON: out = p.knob; return true;
+    case INK_SOFT: case SUBTLE: case SLATE: case ROW_ICON: case CHEVRON: out = p.muted; return true;
+    case CARD_PRESSED: out = mix(p.ink, p.card, 20); return true;
     case ACCENT_PRESSED: out = mix(p.ink, p.knob, 48); return true;
     case ACCENT_TINT: out = mix(p.knob, p.card, 64); return true;
     default: return false;

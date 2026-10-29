@@ -39,6 +39,7 @@ struct View {
   // few dozen strings some 8000 times; through LVGL's glyph tables that held the whole screen for about a second at
   // every new value. The words and most numbers stay from one value to the next, so the widths stay too.
   ec::ChoiceCache choice;  // the form, fonts and places the card chose, kept while its shape stays (energy_card.h)
+  ec::ChoiceCache side;    // the same for the diagram beside the devices' list on a wide card (local fork)
   std::shared_ptr<std::unordered_map<std::string, int>> widths = std::make_shared<std::unordered_map<std::string, int>>();
 };
 
@@ -268,7 +269,12 @@ void render(Widgets &w, const Tile &t, int width, int height) {
   lv_obj_set_pos(canvas, 0, 0);
   lv_obj_set_size(canvas, width, height);
   // The board's fixed fonts the card may use, largest first.
-  view.faces = {rt::watch_value_font, rt::watch_font, rt::control_font, rt::small_font, rt::tile_icon_font(), rt::mini_icon_font, rt::watch_icon_font};
+  // Soft (local fork): its name's face for the house's power ("1.6 kW" carries letters), its shared faces for the rest.
+  const std::array<const lv_font_t *, ec::FACES> faces_now = {rt::soft_bold(rt::watch_value_font), rt::watch_font, rt::control_font, rt::small_font,
+                                                              rt::tile_icon_font(), rt::mini_icon_font, rt::watch_icon_font};
+  // Other faces (a change of look, local fork) measure other widths: what was measured and chosen with the old ones goes.
+  if (faces_now != view.faces) { view.widths->clear(); view.choice = view.side = ec::ChoiceCache(); view.widest.clear(); }
+  view.faces = faces_now;
   ec::Measure m;
   for (int f = 0; f < ec::FACES; ++f) m.line[f] = view.faces[f] ? lv_font_get_line_height(view.faces[f]) : 0;
   const auto faces = view.faces;
@@ -307,14 +313,16 @@ void render(Widgets &w, const Tile &t, int width, int height) {
       if (view.widest.empty() || m.width(ec::SMALL, s) > m.width(ec::SMALL, view.widest)) view.widest = s;
     }
     sc = ec::build(*view.data, m, width, height, words, view.widest, &view.choice, t.energy_lines ? ec::Style::LINES : ec::Style::DOTS);
-    if (!sc.ok) {
-      // Too small for the diagram (a size the editor does not offer): the house's use alone, as a watch card says it.
-      const std::string value = ec::power(view.data->home, words.decimal);
-      int face = ec::WATCH_VALUE;
-      while (face < ec::SMALL && (!view.faces[face] || m.width(ec::Face(face), value) > width)) ++face;
-      const int ih = m.line[ec::ICON_MINI], vh = m.line[face], top = std::max(0, (height - ih - vh) / 2);
-      sc.texts.push_back({ec::utf8(ec::ICON_HOME), ec::ICON_MINI, 0, top, width, true, ec::Paint::INK});
-      sc.texts.push_back({value, ec::Face(face), 0, top + ih, width, true, ec::Paint::INK});
+    // Too small for the diagram: the house's use and its sources without lines (energy_card::summary, local fork).
+    if (!sc.ok) sc = ec::summary(*view.data, m, width, height, words);
+    else {
+      // A wide card whose diagram shows no device (a 3x2): the diagram in three fifths of it, the devices listed beside.
+      if (sc.devices == 0 && (!view.data->devices.empty() || view.data->rest > 0) && width * 2 >= height * 3) {
+        ec::Scene narrow = ec::build(*view.data, m, width * 60 / 100, height, words, view.widest, &view.side,
+                                     t.energy_lines ? ec::Style::LINES : ec::Style::DOTS);
+        if (narrow.ok && narrow.devices == 0) sc = std::move(narrow);
+      }
+      ec::list_devices(sc, *view.data, m, width, height, words);
     }
   } else if (view.data) {
     // Home Assistant knows no power sensor in its Energy settings: say where to add them, as it hides its own view.

@@ -771,6 +771,130 @@ inline Scene build(const Data &data, const Measure &m, int w, int h, const Words
 }
 
 // The circle under a finger, with a touch area of at least `touch` across (docs/RESPONSIVE.md, 7 mm).
+// ---- A card too small for the diagram (local fork): the house's use and its sources, without lines.
+// The house's use large under its icon, and beside it on a strip (a card twice as wide as tall or more) a ring per
+// source in its colour with its icon in it and its power under it; on a card of one cell or a standing one, a line
+// per source under the total, its icon and its power in its colour. As many sources as the room holds, in Home
+// Assistant's order: solar, the grid (what it brings, or what goes back to it), the battery (with its charge). A ring
+// takes a tap as the diagram's circle does: its sensor's history.
+struct Source { uint32_t icon = 0; std::string value, entity; Paint paint = Paint::INK; };
+inline std::vector<Source> sources(const Data &d, const Words &words) {
+  std::vector<Source> out;
+  if (d.solar) out.push_back({ICON_SOLAR, power(d.solar_w, words.decimal), d.solar_entity, Paint::SOLAR});
+  if (d.grid) {
+    // What goes back to the grid takes the return colour, as the diagram's grid number does.
+    const bool back = d.to_grid > d.from_grid;
+    out.push_back({ICON_GRID, power(back ? d.to_grid : d.from_grid, words.decimal), d.grid_entity,
+                   back ? Paint::GRID_OUT : Paint::GRID_IN});
+  }
+  if (d.battery) {
+    const bool in = d.to_battery > d.from_battery;
+    std::string v = power(in ? d.to_battery : d.from_battery, words.decimal);
+    out.push_back({battery_glyph(d.soc), v, d.battery_entity, in ? Paint::BATTERY_IN : Paint::BATTERY_OUT});
+  }
+  return out;
+}
+inline Scene summary(const Data &d, const Measure &m, int w, int h, const Words &words) {
+  Scene sc;
+  const std::vector<Source> all = sources(d, words);
+  const std::string total = power(d.home, words.decimal);
+  const int gap = ui::px(8);
+  auto width = [&](Face f, const std::string &s) { return m.line[f] > 0 ? m.width(f, s) : 1 << 20; };
+  // The total's face: the largest whose line and width the room holds.
+  auto total_face = [&](int room_w, int room_h) {
+    for (Face f : {WATCH_VALUE, HEADLINE, CONTROL, SMALL})
+      if (m.line[f] > 0 && m.line[f] <= room_h && width(f, total) <= room_w) return f;
+    return SMALL;
+  };
+  const int icon_h = m.line[ICON_MINI];
+  if (w >= 2 * h) {
+    // A strip: the total at the left, the sources' rings at the right.
+    const int ring = std::clamp(h * 46 / 100, ui::px(28), ui::px(60)), label_h = m.line[SMALL];
+    auto chip_w = [&](const Source &s) { return std::max(ring, width(SMALL, s.value)); };
+    std::vector<Source> shown = all;
+    auto chips_w = [&]() { int sum = 0; for (auto &s : shown) sum += chip_w(s) + gap; return sum; };
+    while (!shown.empty() && w - chips_w() < width(CONTROL, total)) shown.pop_back();
+    const int left_w = w - chips_w();
+    const Face f = total_face(left_w - gap, h - icon_h);
+    const int block = icon_h + m.line[f], top = std::max(0, (h - block) / 2);
+    sc.texts.push_back({utf8(ICON_HOME), ICON_MINI, 0, top, width(ICON_MINI, utf8(ICON_HOME)) + 2, false, Paint::INK});
+    sc.texts.push_back({total, f, 0, top + icon_h, left_w, false, Paint::INK});
+    int x = w;
+    const int chip_h = ring + ui::px(2) + label_h, cy = std::max(0, (h - chip_h) / 2);
+    for (auto it = shown.rbegin(); it != shown.rend(); ++it) {
+      const int cw = chip_w(*it);
+      x -= cw;
+      const float cx = x + cw / 2.f;
+      sc.circles.push_back({{cx, cy + ring / 2.f}, ring, std::max(2, ring / 18), it->paint, it->entity});
+      sc.texts.push_back({utf8(it->icon), ICON_MINI, int(cx) - ring / 2, cy + (ring - icon_h) / 2, ring, true, it->paint});
+      sc.texts.push_back({it->value, SMALL, x, cy + ring + ui::px(2), cw, true, it->paint});
+      x -= gap;
+    }
+    return sc;
+  }
+  // One cell, or a standing card: the total on top, a line per source under it, centred as a group.
+  const int row = std::max(icon_h, m.line[CONTROL] > 0 ? m.line[CONTROL] : m.line[SMALL]);
+  const Face row_face = m.line[CONTROL] > 0 && m.line[CONTROL] <= row ? CONTROL : SMALL;
+  const Face f = total_face(w, std::max(m.line[SMALL], h / 3));
+  const int head = icon_h + m.line[f];
+  int n = int(all.size());
+  while (n > 0 && head + gap + n * row > h) --n;
+  // A narrow card writes the sources' numbers in the small face when the control face is too wide for them.
+  Face rf = row_face;
+  for (int i = 0; i < n; ++i) if (icon_h + ui::px(4) + width(rf, all[i].value) > w) rf = SMALL;
+  const int block = head + (n ? gap + n * row : 0), top = std::max(0, (h - block) / 2);
+  sc.texts.push_back({utf8(ICON_HOME), ICON_MINI, 0, top, w, true, Paint::INK});
+  sc.texts.push_back({total, f, 0, top + icon_h, w, true, Paint::INK});
+  int widest = 0;
+  for (int i = 0; i < n; ++i) widest = std::max(widest, icon_h + ui::px(4) + width(rf, all[i].value));
+  const int x0 = std::max(0, (w - widest) / 2);
+  for (int i = 0; i < n; ++i) {
+    const int y = top + head + gap + i * row;
+    sc.texts.push_back({utf8(all[i].icon), ICON_MINI, x0, y + (row - icon_h) / 2, icon_h + 2, false, all[i].paint});
+    sc.texts.push_back({all[i].value, rf, x0 + icon_h + ui::px(4), y + (row - m.line[rf]) / 2, w - x0 - icon_h - ui::px(4), false, all[i].paint});
+  }
+  return sc;
+}
+
+// ---- A wide card whose diagram leaves room beside it without its devices (local fork, a 3x2): the diagram at the left
+// and the devices drawing most in a list at the right, a dot in each one's colour, its name and its power.
+inline void shift(Scene &sc, float dx) {
+  for (auto &c : sc.circles) c.c.x += dx;
+  for (auto *list : {&sc.arcs, &sc.ring}) for (auto &a : *list) a.c.x += dx;
+  for (auto &l : sc.lines) { l.a.x += dx; l.b.x += dx; }
+  for (auto &f : sc.flows) for (auto &seg : f.path) { seg.a.x += dx; seg.b.x += dx; seg.c.x += dx; }
+  for (auto &a : sc.arrows) { a.tip.x += dx; a.left.x += dx; a.right.x += dx; }
+  for (auto &t : sc.texts) t.x += int(std::lround(dx));
+}
+inline void list_devices(Scene &sc, const Data &d, const Measure &m, int w, int h, const Words &words) {
+  if (!sc.ok || sc.devices > 0 || (d.devices.empty() && d.rest <= 0) || m.line[SMALL] <= 0) return;
+  float lo = 1e9f, hi = -1e9f;
+  for (auto &c : sc.circles) { lo = std::min(lo, c.c.x - c.d / 2.f); hi = std::max(hi, c.c.x + c.d / 2.f); }
+  // A word's own width, not its box: a centred word's box may run wider than the word.
+  for (auto &t : sc.texts) {
+    const int tw = std::min(t.w, m.width(t.face, t.s)), tx = t.centre ? t.x + (t.w - tw) / 2 : t.x;
+    lo = std::min(lo, float(tx)); hi = std::max(hi, float(tx + tw));
+  }
+  const int gap = ui::px(12), used = int(std::ceil(hi - lo)), room = w - used - 2 * gap;
+  if (lo > hi || room < ui::px(110)) return;
+  shift(sc, -std::floor(lo));  // whole pixels: the lines stay on the grid they were built on
+  const int x0 = used + 2 * gap, row = m.line[SMALL] + ui::px(8), dot = std::max(ui::px(8), m.line[SMALL] / 2);
+  struct Item { std::string name, value; Paint paint; };
+  std::vector<Item> items;
+  static constexpr Paint DEVICES[] = {Paint::DEVICE0, Paint::DEVICE1, Paint::DEVICE2, Paint::DEVICE3};
+  for (size_t i = 0; i < d.devices.size() && i < 4; ++i) items.push_back({d.devices[i].name, power(d.devices[i].w, words.decimal), DEVICES[i]});
+  if (d.rest > 0) items.push_back({words.other, power(d.rest, words.decimal), Paint::REST});
+  const int n = std::min(int(items.size()), std::max(0, h / row));
+  const int top = std::max(0, (h - n * row) / 2);
+  for (int i = 0; i < n; ++i) {
+    const int y = top + i * row, mid = y + row / 2;
+    sc.circles.push_back({{x0 + dot / 2.f, float(mid)}, dot, (dot + 1) / 2, items[i].paint, ""});
+    const int vw = m.width(SMALL, items[i].value) + 2, nx = x0 + dot + ui::px(8);
+    sc.texts.push_back({items[i].value, SMALL, w - vw, mid - m.line[SMALL] / 2, vw, false, Paint::INK});
+    sc.texts.push_back({items[i].name, SMALL, nx, mid - m.line[SMALL] / 2, std::max(1, w - vw - ui::px(6) - nx), false, Paint::MUTED});
+  }
+}
+
 inline const Circle *hit(const Scene &sc, float x, float y, int touch) {
   const Circle *best = nullptr;
   float best_d = 1e9f;

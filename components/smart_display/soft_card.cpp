@@ -249,6 +249,7 @@ static void soft_alarm_key(lv_event_t *e){
   alarm_choose(t,mode);
 }
 static void soft_guard(Widgets &w,const Tile &t,const SoftCard &c){
+  if(!w.soft_watch)w.cached_active=-1;  // the palette pass paints the state in ink from now on
   w.soft_drawn=w.soft_watch=true;  // the state in ink, as Soft's big value
   hide_panel(w);lv_obj_add_flag(w.progress,LV_OBJ_FLAG_HIDDEN);lv_obj_add_flag(w.slider,LV_OBJ_FLAG_HIDDEN);set_hidden(w.unit,true);
   const int pad=std::clamp(std::min(tile_width(w),tile_height(w))*9/100,ui::px(12),ui::px(24));
@@ -309,6 +310,9 @@ static void soft_guard(Widgets &w,const Tile &t,const SoftCard &c){
                               static_cast<int>(lv_font_get_line_height(names[size]))*5>bottom))--size;
   const lv_font_t *state_face=names[size]?names[size]:w.value_font;
   const lv_font_t *name_face=states[std::max(0,size-1)]?states[std::max(0,size-1)]:w.title_font;
+  // A state too long for the smallest name face (a narrow card) takes the state's faces before it is cut.
+  if(text_width(state,state_face)>cw)
+    for(int i=2;i>=0;--i)if(states[i]&&text_width(state,states[i])<=cw){state_face=states[i];name_face=states[0]?states[0]:name_face;break;}
   for(auto *o:{w.title,w.value})set_number(o,LV_STYLE_TEXT_LETTER_SPACE,size==2?2:1);
   set_font(w.value,state_face);set_font(w.title,name_face);
   const int state_h=lv_font_get_line_height(state_face),name_h=name_text&&*name_text?lv_font_get_line_height(name_face):0;
@@ -349,7 +353,10 @@ void soft_card(Widgets &w,const Tile &t,const SoftCard &c){
   if(c.d=="media_player"&&!w.full&&!c.watch&&!c.graph&&!t.favorite()){soft_media(w,t,c);return;}
   if((c.d=="alarm_control_panel"||c.d=="lock")&&!c.watch&&!c.graph&&!t.stacked&&(t.row_span()>1||w.full)){soft_guard(w,t,c);return;}
   const std::string &d=c.d,&value=c.value,&unit=c.unit,&value_short=c.value_short,&value_tail=c.value_tail;
-  const bool with_panel=c.with_panel,mini=c.mini,large_tile=c.large_tile,watch=c.watch,graph=c.graph;
+  // Soft's weather on a card larger than one cell is its big value (local fork): the temperature large, the
+  // condition's icon in its circle and the name, as a sensor's watch.
+  const bool weather_big=d=="weather"&&t.display=="standard"&&!t.stacked&&(t.column_span()>1||t.row_span()>1||w.full)&&t.available();
+  const bool with_panel=c.with_panel,mini=c.mini,large_tile=c.large_tile,watch=c.watch||weather_big,graph=c.graph;
   int content_w=c.content_w,content_h=c.content_h;
   int title_height=lv_font_get_line_height(lv_obj_get_style_text_font(w.title,LV_PART_MAIN));
   int value_height=lv_font_get_line_height(lv_obj_get_style_text_font(w.value,LV_PART_MAIN));
@@ -385,47 +392,88 @@ void soft_card(Widgets &w,const Tile &t,const SoftCard &c){
     if(!value.empty()){label(w.unit,value);lv_obj_set_pos(w.unit,0,top+circle+gap+title_height+ui::px(2));lv_obj_set_width(w.unit,content_w);}
   }
   else if(graph){
-    // Soft's graph card (local fork): the head of every Soft card, the icon in its circle at the top left, the value at
-    // the top right and the name under them, and the graph under the head to the card's border; on a card wider than
-    // it is tall the head keeps the left and the graph takes the right, to the border on three sides (render_graph).
+    // Soft's graph card (local fork): the head of every Soft card, the icon in its circle and the name beside it, the
+    // value large under them, and the day's graph under the value across the card's whole width, to its border on three
+    // sides (render_graph). A card too low for a line of its own for the value (a card one row tall) gives it the right
+    // end of the head's row instead, so the graph keeps its room.
     w.soft_drawn=w.soft_watch=true;  // the value in ink, as on Soft's big value
-    hide_panel(w);lv_obj_add_flag(w.progress,LV_OBJ_FLAG_HIDDEN);lv_obj_add_flag(w.slider,LV_OBJ_FLAG_HIDDEN);set_hidden(w.unit,true);
+    hide_panel(w);lv_obj_add_flag(w.progress,LV_OBJ_FLAG_HIDDEN);lv_obj_add_flag(w.slider,LV_OBJ_FLAG_HIDDEN);
     const int pad=std::clamp(std::min(tile_width(w),tile_height(w))*9/100,ui::px(12),ui::px(24));
     for(auto prop:{LV_STYLE_PAD_TOP,LV_STYLE_PAD_BOTTOM,LV_STYLE_PAD_LEFT,LV_STYLE_PAD_RIGHT})set_number(w.tile,prop,pad);
     content_w=content_width(w);content_h=content_height(w);
     const int gap=std::max(ui::px(8),pad*2/3);
-    const bool beside=tile_width(w)*5>tile_height(w)*6;
-    const int area_w=beside?content_w*55/100-gap:content_w;  // the head's room
-    const int circle=std::clamp(std::min(area_w,content_h)*28/100,ui::px(34),ui::px(56));
-    // The name's face from the head's width and the card's height, a size down for a name too long for its width.
-    const int target=std::min(area_w/8,content_h/6);
+    const int circle=std::clamp(std::min(content_w,content_h)*24/100,ui::px(32),ui::px(56));
+    const int graph_min=std::max(ui::px(36),content_h*30/100);
+    // The name's face from the card's size, a size down for a name too long for the room beside the circle.
+    const int target=std::min(content_w/8,content_h/6);
     int size=0;
     for(int i=2;i>0;--i)if(soft_name_faces()[i]&&static_cast<int>(lv_font_get_line_height(soft_name_faces()[i]))*4<=target*5){size=i;break;}
     const char *name_text=lv_label_get_text(w.title);
-    while(size>0 && soft_name_faces()[size-1] && name_text &&
-          text_width(name_text,soft_name_faces()[size])+(size==2?2:1)*static_cast<int>(strlen(name_text))>area_w)--size;
+    const int spacing_of=size==2?2:1;
+    auto name_w=[&](int i){return name_text?text_width(name_text,soft_name_faces()[i])+(i==2?2:1)*static_cast<int>(strlen(name_text)):0;};
+    while(size>0 && soft_name_faces()[size-1] && name_w(size)>content_w-circle-gap)--size;
     const lv_font_t *name_face=soft_name_faces()[size]?soft_name_faces()[size]:w.title_font;
-    // The value a size up from the name's words where it fits beside the circle: it is what the card is read for.
-    const int value_x=circle+gap,value_w=std::max(1,area_w-value_x);
-    const lv_font_t *value_face=soft_state_faces()[size]?soft_state_faces()[size]:w.value_font;
-    if(size<2 && soft_state_faces()[size+1] && text_width(value,soft_state_faces()[size+1])+static_cast<int>(value.size())<=value_w)
-      value_face=soft_state_faces()[size+1];
-    const int spacing=size==2?2:1;
-    for(auto *o:{w.title,w.value})set_number(o,LV_STYLE_TEXT_LETTER_SPACE,spacing);
-    set_font(w.title,name_face);set_font(w.value,value_face);
-    title_height=lv_font_get_line_height(name_face);value_height=lv_font_get_line_height(value_face);
-    lv_obj_set_height(w.title,title_height);lv_obj_set_height(w.value,value_height);
-    set_text_align(w.title,LV_TEXT_ALIGN_LEFT);set_text_align(w.value,LV_TEXT_ALIGN_RIGHT);
-    soft_icon(w,t,circle,0);
-    lv_obj_set_pos(w.value,value_x,(circle-value_height)/2);lv_obj_set_width(w.value,value_w);
-    fit_value(w.value,value,value_short,value_tail,value_w);set_hidden(w.value,false);
-    const int name_y=circle+gap;
-    lv_obj_set_pos(w.title,0,name_y);lv_obj_set_width(w.title,std::max(1,area_w));
-    if(beside)render_graph(w,t,large_tile,area_w+gap,0,content_w-area_w-gap,content_h,graph_bleed(w,false,true,true,true));
-    else{
-      const int graph_y=name_y+title_height+gap;
-      render_graph(w,t,large_tile,0,graph_y,content_w,std::max(8,content_h-graph_y),graph_bleed(w,true,false,true,true));
+    const lv_font_t *unit_face=soft_state_faces()[size]?soft_state_faces()[size]:w.value_font;
+    for(auto *o:{w.title,w.unit})set_number(o,LV_STYLE_TEXT_LETTER_SPACE,size==2?2:spacing_of);
+    set_number(w.value,LV_STYLE_TEXT_LETTER_SPACE,0);
+    set_font(w.title,name_face);set_font(w.unit,unit_face);
+    title_height=lv_font_get_line_height(name_face);const int unit_h=lv_font_get_line_height(unit_face);
+    lv_obj_set_height(w.title,title_height);lv_obj_set_height(w.unit,unit_h);
+    set_text_align(w.title,LV_TEXT_ALIGN_LEFT);set_text_align(w.value,LV_TEXT_ALIGN_LEFT);set_text_align(w.unit,LV_TEXT_ALIGN_LEFT);
+    // The value: the largest of Soft's figures (a word: the name's faces) that its room holds, the unit beside it,
+    // smaller, as on Soft's big value: the line the card is given ("21.4 °C") is split at its unit.
+    std::string number=value,units=unit;
+    if(units.empty()&&!t.unit.empty()&&number.size()>t.unit.size()&&number.compare(number.size()-t.unit.size(),t.unit.size(),t.unit)==0){
+      units=t.unit;number.resize(number.size()-t.unit.size());
+      while(!number.empty()&&number.back()==' ')number.pop_back();
     }
+    const bool figures=soft_figures(number);
+    const auto faces=figures?soft_value_faces():soft_name_faces();
+    const int unit_gap=ui::px(4);
+    const int unit_w=units.empty()?0:text_width(units,unit_face)+static_cast<int>(units.size());
+    auto pick=[&](int room_w,int room_h)->const lv_font_t *{
+      if(figures)for(auto *f:soft_big_figures())
+        if(f&&static_cast<int>(lv_font_get_line_height(f))<=room_h&&text_width(number,f)+unit_gap+unit_w<=room_w)return f;
+      for(int i=2;i>=0;--i){
+        const lv_font_t *f=faces[i];
+        if(f&&static_cast<int>(lv_font_get_line_height(f))<=room_h&&text_width(number,f)+(unit_w?unit_gap+unit_w:0)<=room_w)return f;
+      }
+      return nullptr;
+    };
+    const int head=std::max(circle,title_height);
+    // A line of its own under the head where it leaves the graph its room; else the head row's right end.
+    const int below_h=content_h-head-gap-graph_min-gap;
+    const lv_font_t *own=below_h>0?pick(content_w,below_h):nullptr;
+    const bool beside=!own;
+    const int name_room=content_w-circle-gap;
+    const lv_font_t *value_face=own;
+    int value_w=0;
+    if(beside){
+      value_face=pick(std::max(1,name_room/2),head);
+      if(!value_face)value_face=faces[0]?faces[0]:w.value_font;
+    }
+    set_font(w.value,value_face);
+    const int value_h=lv_font_get_line_height(value_face);lv_obj_set_height(w.value,value_h);
+    value_w=text_width(number,value_face)+ui::px(2);
+    const int block_w=value_w+(unit_w?unit_gap+unit_w:0);
+    soft_icon(w,t,circle,(head-circle)/2);
+    const int value_x=beside?std::max(circle+gap,content_w-block_w):0;
+    const int value_y=beside?(head-value_h)/2:head+gap;
+    lv_obj_set_pos(w.value,value_x,value_y);lv_obj_set_width(w.value,std::max(1,std::min(value_w,content_w-value_x)));
+    label(w.value,number);set_hidden(w.value,false);
+    set_hidden(w.unit,units.empty());
+    if(!units.empty()){
+      const int baseline=value_y+value_h-value_face->base_line;
+      label(w.unit,units);lv_obj_set_width(w.unit,unit_w);
+      lv_obj_set_pos(w.unit,value_x+value_w+unit_gap,baseline-(unit_h-unit_face->base_line));
+    }
+    // The name beside the circle, as far as the value at the row's end leaves it; on a card too narrow for both (a
+    // single cell) on a line of its own under the head.
+    const bool name_under=beside&&value_x-gap-circle-gap<ui::px(48);
+    if(name_under){lv_obj_set_pos(w.title,0,head+gap/2);lv_obj_set_width(w.title,content_w);}
+    else{lv_obj_set_pos(w.title,circle+gap,(head-title_height)/2);lv_obj_set_width(w.title,std::max(1,(beside?value_x-gap:content_w)-circle-gap));}
+    const int graph_y=(name_under?head+gap/2+title_height:beside?head:value_y+value_h)+gap;
+    render_graph(w,t,large_tile,0,graph_y,content_w,std::max(8,content_h-graph_y),graph_bleed(w,true,false,true,true));
   }
   else if(watch){
     // Soft's big value (local fork), three ways by the card's shape:
@@ -453,6 +501,9 @@ void soft_card(Widgets &w,const Tile &t,const SoftCard &c){
           text_width(name_text,soft_name_faces()[size])+(size==2?2:1)*static_cast<int>(strlen(name_text))>name_room*(strip?6:10)/10)--size;
     const lv_font_t *name_face=soft_name_faces()[size]?soft_name_faces()[size]:w.title_font;
     const lv_font_t *unit_face=soft_state_faces()[size]?soft_state_faces()[size]:w.value_font;
+    // A name too long for the smallest name face (a narrow card) takes the state's faces before it is cut.
+    if(name_text&&text_width(name_text,name_face)+static_cast<int>(strlen(name_text))>name_room)
+      for(int i=2;i>=0;--i)if(auto *f=soft_state_faces()[i];f&&text_width(name_text,f)+static_cast<int>(strlen(name_text))<=name_room){name_face=f;break;}
     const int spacing=size==2?2:1;
     set_number(w.title,LV_STYLE_TEXT_LETTER_SPACE,spacing);set_number(w.unit,LV_STYLE_TEXT_LETTER_SPACE,spacing);
     set_number(w.value,LV_STYLE_TEXT_LETTER_SPACE,0);
@@ -472,6 +523,10 @@ void soft_card(Widgets &w,const Tile &t,const SoftCard &c){
     const bool figures=soft_figures(value);
     const auto faces=figures?soft_value_faces():soft_name_faces();
     const lv_font_t *value_face=nullptr;
+    // Figures on a card with the room take Soft's largest, the clock's display size (soft_xl): a big card is read
+    // from across the room.
+    if(figures)for(auto *f:soft_big_figures())
+      if(f&&static_cast<int>(lv_font_get_line_height(f))<=room_h&&text_width(value,f)+(with_unit?unit_gap+unit_w:0)<=room_w){value_face=f;break;}
     for(int pass=0;pass<2 && !value_face;++pass){
       const int beside=with_unit?unit_gap+unit_w:0;
       for(int i=2;i>=0;--i){
@@ -482,6 +537,10 @@ void soft_card(Widgets &w,const Tile &t,const SoftCard &c){
       if(!value_face && with_unit){with_unit=false;unit_w=0;}
     }
     if(!value_face)value_face=faces[0]?faces[0]:w.value_font;
+    // A value too long for the smallest face takes the state's faces before it is cut ("Cleaning / max", a sun's
+    // "07:20 - 18:05").
+    if(text_width(value,value_face)>room_w)
+      for(int i=2;i>=0;--i)if(auto *f=soft_state_faces()[i];f&&text_width(value,f)<=room_w){value_face=f;break;}
     set_font(w.value,value_face);
     const int value_h=lv_font_get_line_height(value_face);lv_obj_set_height(w.value,value_h);
     const int value_w=text_width(value,value_face)+ui::px(2);
@@ -658,6 +717,11 @@ void soft_card(Widgets &w,const Tile &t,const SoftCard &c){
         else{second=second.empty()?word:word+" · "+second;word.clear();}
       }
       text_w=std::max(1,(word_w?word_x-gap:row_end)-text_x);
+      // A name the word at the row's end would cut ("House …  1,840 W"): the word goes under the name instead.
+      if(word_w&&name_text&&letters(name_text,name_face)>text_w){
+        second=second.empty()?word:word+" · "+second;word.clear();word_w=0;
+        text_w=std::max(1,row_end-text_x);
+      }
       text_y=(head_h-title_height-line_gap-value_height)/2;
     }else if(column){
       // The head: the circle, the name beside it on the circle's middle line with its second line under it.

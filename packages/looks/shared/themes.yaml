@@ -20,6 +20,8 @@ substitutions:
     runtime_tiles::soft_value_s = id(soft_value_s)->get_lv_font();
     runtime_tiles::soft_value_m = id(soft_value_m)->get_lv_font();
     runtime_tiles::soft_value_l = id(soft_value_l)->get_lv_font();
+    runtime_tiles::soft_value_xl = id(soft_value_xl)->get_lv_font();
+    runtime_tiles::soft_value_hero = id(soft_value_hero)->get_lv_font();
     runtime_tiles::soft_outline_s = id(soft_outline_icons_mini)->get_lv_font();
     runtime_tiles::soft_outline_m = id(soft_outline_icons)->get_lv_font();
     runtime_tiles::soft_outline_l = id(soft_outline_icons_big)->get_lv_font();
@@ -454,7 +456,7 @@ font:
     id: soft_value_s
     size: ${ (FONT_LABEL_SIZE | int) + 18 }
     bpp: 4
-    glyphs: &soft_figures ['0','1','2','3','4','5','6','7','8','9','.',',','-','+',':','/',' ','°']
+    glyphs: &soft_figures ['0','1','2','3','4','5','6','7','8','9','.',',','-','+',':','/',' ','°','%']
   - file: "${FONT_DIR}/Figtree-500.ttf"
     id: soft_value_m
     size: ${ (FONT_LABEL_SIZE | int) + 34 }
@@ -463,6 +465,18 @@ font:
   - file: "${FONT_DIR}/Figtree-500.ttf"
     id: soft_value_l
     size: ${ (FONT_LABEL_SIZE | int) + 54 }
+    bpp: 4
+    glyphs: *soft_figures
+  # Soft's big value on a card of a page or so (local fork): the figures between the largest step and the clock's.
+  - file: "${FONT_DIR}/Figtree-500.ttf"
+    id: soft_value_hero
+    size: ${ (FONT_LABEL_SIZE | int) + 90 }
+    bpp: 4
+    glyphs: *soft_figures
+  # Soft's clock (local fork): the same figures at the clock's display size (FONT_DISPLAY_SIZE), for a flip clock's blocks.
+  - file: "${FONT_DIR}/Figtree-500.ttf"
+    id: soft_value_xl
+    size: ${FONT_DISPLAY_SIZE}
     bpp: 4
     glyphs: *soft_figures
   # Soft's outline icons: the tile icons Material Design Icons also draws as "-outline", at the small, the

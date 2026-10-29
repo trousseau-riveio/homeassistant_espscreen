@@ -20,7 +20,9 @@ struct View : meter_paint::Look {};
 
 // The board's fixed fonts, in meter_card::Face's order.
 static std::array<const lv_font_t *, mc::FACES> faces() {
-  return {rt::label_font, rt::small_font, rt::control_font, rt::watch_font, rt::watch_value_font, rt::setpoint_font,
+  // Soft (local fork) writes the meter in its own faces, the value in the name's: it carries its unit's letters.
+  return {rt::soft_bold(rt::label_font), rt::soft_text(rt::small_font), rt::soft_text(rt::control_font), rt::soft_bold(rt::watch_font),
+          rt::soft_bold(rt::watch_value_font), rt::soft_bold(rt::own_faces_kept ? rt::own_faces.setpoint : rt::setpoint_font),
           rt::watch_icon_font, rt::mini_icon_font, rt::tile_icon_font(), rt::big_icon_font};
 }
 // The first codepoint of a UTF-8 text from `at`, moving `at` past it.
@@ -114,7 +116,8 @@ void render(Widgets &w, const Tile &t, int width, int height) {
   v.high = std::isfinite(o.high) ? o.high : 100;
   const bool live = rt::fresh() && t.available();
   v.value = live ? number_of(t.state) : NAN;
-  v.own = tile_controls::accent(t);
+  // Soft (local fork): a meter of one colour in the palette's accent; segments keep their green, orange and red.
+  v.own = theme::soft ? theme::soft_colors().knob : tile_controls::accent(t);
   v.ground = theme::surface(t.background);
   v.background = t.background != 0;
   v.icon = rt::icon_for(t);

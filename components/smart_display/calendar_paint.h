@@ -31,8 +31,9 @@ inline uint32_t colour(cc::Paint p, const std::vector<uint32_t> &colors) {
     case cc::SCRIM: return theme::hex(theme::SCRIM);
     case cc::ACCENT: return theme::hex(theme::ACCENT);
     case cc::ACCENT_TINT: return theme::hex(theme::ACCENT_TINT);
-    case cc::ON_TINT: return theme::tint(theme::ha::AMBER, 40);
-    case cc::ON_ICON: return theme::icon(theme::ha::AMBER);
+    // Soft (local fork): the head's circle and icon as every Soft card's, the palette's circle and accent.
+    case cc::ON_TINT: return theme::soft ? theme::soft_colors().circle : theme::tint(theme::ha::AMBER, 40);
+    case cc::ON_ICON: return theme::soft ? theme::soft_colors().knob : theme::icon(theme::ha::AMBER);
     case cc::OFF_TINT: return theme::tint(theme::STATE_OFF, 40);
     case cc::OFF_ICON: return theme::icon(theme::STATE_OFF);
     case cc::CAL_KEY: return key;

@@ -64,6 +64,9 @@ STATES = {
     'automation.night': {'state': 'on', 'attributes': {'last_triggered': '2026-10-28T08:00:00+00:00'}},
     'timer.eggs': {'state': 'active', 'attributes': {'duration': '0:05:00', 'remaining': '0:04:32', 'finishes_at': '2026-10-28T12:04:32+00:00'}},
     'sensor.graph': {'state': '21.4', 'attributes': {'unit_of_measurement': '°C', 'device_class': 'temperature'}},
+    'sensor.energy': {'state': '12345.6', 'attributes': {'unit_of_measurement': 'kWh', 'device_class': 'energy'}},
+    'sensor.pressure': {'state': '1016.4', 'attributes': {'unit_of_measurement': 'hPa', 'device_class': 'pressure'}},
+    'sensor.text': {'state': 'Partly cloudy', 'attributes': {}},
     # The rest of the types, for the audit pages (a_*).
     'alarm_control_panel.home': {'state': 'armed_home', 'attributes': {'supported_features': 63, 'code_format': 'number', 'code_arm_required': True}},
     'alarm_control_panel.off': {'state': 'disarmed', 'attributes': {'supported_features': 63, 'code_format': 'number'}},
@@ -82,6 +85,25 @@ STATES = {
     'calendar.home': {'state': 'on', 'attributes': {'message': 'Dentist', 'start_time': '2026-10-28 14:00:00', 'end_time': '2026-10-28 15:00:00'}},
     'lock.open': {'state': 'unlocked', 'attributes': {}},
     'vacuum.cleaning': {'state': 'cleaning', 'attributes': {'battery_level': 64, 'fan_speed': 'max', 'fan_speed_list': ['quiet', 'max'], 'supported_features': 30524}},
+}
+# What the app works out for some types besides their state (core.extras): a forecast, the sun's times, a calendar's
+# events (minutes from today 00:00, run.MOMENT's day).
+_DAYS = [('Tue', 'partlycloudy', 19, 11, 20, 2), ('Wed', 'rainy', 15, 9, 80, 3), ('Thu', 'cloudy', 16, 10, 40, 4),
+         ('Fri', 'sunny', 21, 12, 0, 5), ('Sat', 'sunny', 23, 13, 0, 6), ('Sun', 'partlycloudy', 20, 12, 10, 0), ('Mon', 'rainy', 14, 8, 90, 1)]
+_HOURS = [(f'{h:02d}:00', c, t, r, h) for h, c, t, r in
+          [(11, 'partlycloudy', 16, 10), (12, 'sunny', 17, 0), (13, 'sunny', 18, 0), (14, 'partlycloudy', 18, 10), (15, 'cloudy', 17, 30),
+           (16, 'rainy', 15, 70), (17, 'rainy', 14, 80), (18, 'cloudy', 13, 20)]]
+EXTRAS = {
+    'weather.home': {'days': [{'d': d, 'c': c, 'h': h, 'l': l, 'p': p, 'w': w} for d, c, h, l, p, w in _DAYS],
+                     'hours': [{'t': t, 'c': c, 'h': h, 'p': p, 'o': o} for t, c, h, p, o in _HOURS]},
+    'sun.sun': {'rise': '07:20', 'set': '18:05'},
+    # A sunny noon (energy_flow.py's form): solar 2.4 kW, 1.6 kW of it into the house, 300 W out to the grid, 500 W into
+    # the battery at 72 %, and the devices drawing most.
+    'screen.energy': {'h': 7, 'p': [2400, 0, 300, 0, 500, 1600], 'f': [1600, 300, 500, 0, 0, 0, 0], 'c': 72, 'n': 'Home',
+                      'd': [{'n': 'Dishwasher', 'w': 640}, {'n': 'Fridge', 'w': 120}, {'n': 'Office', 'w': 310}], 'o': 530},
+    'calendar.home': {'cal': {'d': [2026, 9, 15, 2], 'r': [0, 7], 'c': [[0xE53935, 'Family'], [0x1E88E5, 'Work']],
+                              'e': [[600, 660, 0, 0, 'Dentist', 'Main Street'], [780, 840, 0, 1, 'Team call', ''],
+                                    [1440 + 540, 1440 + 600, 0, 0, 'School run', ''], [2880 + 1140, 2880 + 1260, 0, 1, 'Dinner with Sam', 'Rue Verte']]}},
 }
 HISTORY = {'hours': 24, 'values': [17.8, 17.2, 16.9, 16.8, 17.4, 18.6, 19.9, 20.8, 21.6, 22.4, 23.1, 23.4,
                                    23.2, 22.9, 22.1, 21.4, 20.9, 20.6, 20.1, 19.8, 20.4, 21.0, 21.3, 21.4]}
@@ -175,6 +197,36 @@ PAGES = [
                  ('lock.door', 'Front door', '', {}, 1, 2, 2, 1)]),
     ('a_guard2', [('alarm_control_panel.home', 'House', '', {}, 0, 0, 1, 3), ('lock.open', 'Garage door', '', {}, 1, 0, 2, 2),
                   ('alarm_control_panel.off', 'Shed', '', {}, 1, 2, 2, 1)]),
+    ('w_weather', [('weather.home', 'Weather', '', {}, 0, 0, 1, 1), ('weather.home', 'Outside', '', {}, 1, 0, 2, 1),
+                   ('weather.home', 'Forecast', '', {'display': 'forecast'}, 0, 1, 3, 1), ('weather.home', 'Week', '', {'display': 'forecast'}, 0, 2, 2, 1),
+                   ('sun.sun', 'Sun', '', {'display': 'sunpath'}, 2, 2, 1, 1)]),
+    ('w_weather2', [('weather.home', 'Home', '', {'display': 'forecast'}, 0, 0, 2, 2), ('weather.home', 'Today', '', {}, 2, 0, 1, 2),
+                    ('sun.sun', 'Sun', '', {'display': 'sunpath'}, 0, 2, 3, 1)]),
+    ('w_weather3', [('weather.home', 'Weather', '', {'display': 'forecast'}, 0, 0, 3, 2), ('weather.home', 'Now', '', {}, 0, 2, 3, 1)]),
+    ('w_cal', [('calendar.home', 'Family', '', {}, 0, 0, 1, 1), ('calendar.home', 'Agenda', '', {}, 1, 0, 2, 1),
+               ('calendar.home', 'This week', '', {}, 0, 1, 2, 2), ('calendar.home', 'Next', '', {}, 2, 1, 1, 2)]),
+    ('w_cal2', [('calendar.home', 'Family', '', {}, 0, 0, 3, 3)]),
+    ('a_clocks', [('screen.clock', '', '', {'display': 'flip'}, 0, 0, 2, 2), ('screen.clock', '', '', {'display': 'dial'}, 2, 0, 1, 2),
+                  ('screen.clock', '', '', {'display': 'digital'}, 0, 2, 1, 1), ('screen.clock', '', '', {'display': 'dial'}, 1, 2, 2, 1)]),
+    ('a_clocks2', [('screen.clock', '', '', {'display': 'analog'}, 0, 0, 2, 2), ('screen.clock', '', '', {'display': 'digital'}, 2, 0, 1, 2),
+                   ('screen.clock', '', '', {'display': 'flip'}, 0, 2, 2, 1), ('screen.clock', '', '', {'display': 'analog'}, 2, 2, 1, 1)]),
+    ('a_meter', [('sensor.power', 'House power', '', {'display': 'meter'}, 0, 0, 1, 1), ('sensor.humidity', 'Humidity', '', {'display': 'meter'}, 1, 0, 2, 1),
+                 ('sensor.temp', 'Living room', '', {'display': 'meter'}, 0, 1, 1, 2), ('sensor.co2', 'Office CO2', '', {'display': 'meter'}, 1, 1, 2, 2)]),
+    ('a_builtin', [('screen.settings', '', '', {}, 0, 0, 1, 1), ('screen.page', 'Home', '', {}, 1, 0, 1, 1), ('screen.map', '', '', {}, 2, 0, 1, 1),
+                   ('screen.energy', '', '', {}, 0, 1, 2, 2), ('screen.settings', '', '', {}, 2, 1, 1, 2)]),
+    ('a_night', [('screen.nightstand', '', '', {}, 0, 0, 3, 3)]),
+    ('s_std', [('sensor.temp', 'Living room', '', {}, 0, 0, 1, 1), ('sensor.power', 'House power', '', {}, 1, 0, 2, 1),
+               ('sensor.energy', 'Energy today', '', {}, 0, 1, 1, 2), ('sensor.co2', 'Office CO2', '', {}, 1, 1, 2, 2)]),
+    ('s_watch', [('sensor.energy', 'Energy', '', WATCH, 0, 0, 1, 1), ('sensor.pressure', 'Pressure', '', WATCH, 1, 0, 1, 1),
+                 ('sensor.text', 'Sky', '', WATCH, 2, 0, 1, 1), ('sensor.energy', 'Energy total', '', WATCH, 0, 1, 2, 1),
+                 ('sensor.power', 'House power', '', WATCH, 2, 1, 1, 2), ('sensor.pressure', 'Pressure', '', WATCH, 0, 2, 2, 1)]),
+    ('s_watch2', [('sensor.energy', 'Energy total', '', WATCH, 0, 0, 3, 1), ('sensor.power', 'House power', '', WATCH, 0, 1, 2, 2),
+                  ('sensor.co2', 'CO2', '', WATCH, 2, 1, 1, 2)]),
+    ('s_watch3', [('sensor.temp_f', 'Outside temperature', '', WATCH, 0, 0, 3, 2), ('sensor.energy', 'Energy', '', WATCH, 0, 2, 3, 1)]),
+    ('s_watch4', [('sensor.power', 'House power', '', WATCH, 0, 0, 3, 3)]),
+    ('e_energy', [('screen.energy', '', '', {}, 0, 0, 2, 2), ('screen.energy', '', '', {}, 2, 0, 1, 2), ('screen.energy', '', '', {}, 0, 2, 3, 1)]),
+    ('e_energy2', [('screen.energy', '', '', {}, 0, 0, 3, 2), ('screen.energy', '', '', {}, 0, 2, 1, 1), ('screen.energy', '', '', {}, 1, 2, 2, 1)]),
+    ('e_energy3', [('screen.energy', '', '', {}, 0, 0, 3, 3)]),
     ('a_screen', [('screen.clock', '', '', {'display': 'digital'}, 0, 0, 2, 1), ('screen.clock', '', '', {'display': 'analog'}, 2, 0, 1, 1),
                   ('screen.clock', '', '', {'display': 'flip'}, 0, 1, 3, 1), ('screen.clock', '', '', {'display': 'dial'}, 0, 2, 1, 1),
                   ('input_select.scene', 'Scene', '', {'controls': 'stepper'}, 1, 2, 2, 1)]),
@@ -192,6 +244,21 @@ PAGES = [
     ('c_media_full', [('media_player.sonos', 'Living room', '', {'controls': 'volume_playback'}, 0, 0, 3, 3)]),
     ('graph_full', [('sensor.graph', 'Outside temperature', '', GRAPH, 0, 0, 3, 3)]),
 ]
+
+
+# The cards a tap (or a hold, for a tile a tap switches) opens: page -> [(tile on the page, hold, shot)].
+CARDS = {
+    'singles': [(0, True, 'k_light'), (2, True, 'k_lock'), (6, True, 'k_blind')],
+    'c_climate2': [(0, False, 'k_climate')],
+    'c_cover3': [(3, False, 'k_tilt')],
+    'c_misc': [(0, False, 'k_select'), (3, True, 'k_timer')],
+    'c_misc2': [(0, True, 'k_vacuum'), (2, True, 'k_fan')],
+    'a_big2': [(0, False, 'k_alarm')],
+    'graphs': [(0, False, 'k_graph')],
+    'w_weather': [(0, False, 'k_weather')],
+    'w_cal': [(1, False, 'k_calendar')],
+    'c_misc3': [(2, True, 'k_humidifier')],
+}
 
 
 class Study(run.Run):
@@ -226,7 +293,7 @@ class Study(run.Run):
             return answer
         self.sender.send = logged
         region = dict(keepalive=120, clock_24h=True, numbers='point', group_min=1, percent_space=False)
-        states, pages = {}, []
+        states, pages, extras_of = {}, [], {}
         for page, (title, cells) in enumerate(PAGES):
             tiles = []
             for n, (state, name, icon, options, c, r, w, h) in enumerate(cells):
@@ -235,7 +302,11 @@ class Study(run.Run):
                 entity = state if domain == 'screen' else f'{domain}.{state.split(".")[1]}_p{page}_{n}'
                 if domain != 'screen':
                     states[entity] = STATES[state]
-                content = {'kind': 'builtin', 'name': entity[7:]} if domain == 'screen' else {'kind': 'entity', 'entityId': entity}
+                if state in EXTRAS:
+                    extras_of[entity] = EXTRAS[state]
+                # screen.page: a tile that goes to the home page (navigation); screen.<card>: the screen's own card.
+                content = ({'kind': 'navigation', 'target': {'kind': 'home'}} if entity == 'screen.page' else
+                           {'kind': 'builtin', 'name': entity[7:]} if domain == 'screen' else {'kind': 'entity', 'entityId': entity})
                 tiles.append({'id': f'a{page:03x}{n:012x}', 'content': content,
                               'placement': {'row': r, 'column': c, 'columns': w, 'rows': h},
                               'appearance': {'label': name, 'presentation': page_layout.footprint_size(w, h, grid),
@@ -248,7 +319,8 @@ class Study(run.Run):
                   'layout': {'title': 'Soft', 'homePageId': pages[0]['id'], 'pages': pages}}
         compiled = send_layout.compile_tiles(record['layout'], grid)
         import core
-        values = [send_layout.state_message(i, tile, states, core.media_extras(states[tile['entity']]['attributes']) if tile['entity'].startswith('media_player.') else None)
+        values = [send_layout.state_message(i, tile, states, core.media_extras(states[tile['entity']]['attributes']) if tile['entity'].startswith('media_player.')
+                                            else extras_of.get(tile['entity']))
                   for i, tile in enumerate(compiled)]
         for message, tile in zip(values, compiled):
             if tile['entity'].startswith('sensor.graph'):
@@ -308,6 +380,19 @@ class Study(run.Run):
             await self.page_done(page)
             await asyncio.sleep(3.0 if name.startswith('m_') else 0.5)  # a player's cover comes after the page
             await self.render(name, timeout=6)
+            for n, hold, shot in CARDS.get(name, ()):
+                index = next(i for i, tile in enumerate(compiled) if tile['entity'].endswith(f'_p{page}_{n}'))
+                start = len(self.lines)
+                await self.call('render_tile_center', index=index)
+                line = await self.until(lambda l: f'tile_center index={index}' in l, 5, f'tile {index}', start)
+                x, y = (int(part.split('=')[1]) for part in line.split()[-2:])
+                await self.call('render_finger', x=x, y=y, down=True)
+                await asyncio.sleep(1.2 if hold else 0.15)
+                await self.call('render_finger', x=x, y=y, down=False)
+                await asyncio.sleep(2.0)
+                await self.render(shot, timeout=6)
+                await self.call('render_close_cards')
+                await asyncio.sleep(0.6)
             if name == 'm_card':
                 # The player's card, opened as a finger does: a tap on the tile's words.
                 index = next(i for i, tile in enumerate(compiled) if tile['entity'].endswith(f'_p{page}_0'))
@@ -326,7 +411,50 @@ class Study(run.Run):
                 await asyncio.sleep(1.0)
                 await self.call('render_close_cards')
                 await asyncio.sleep(0.5)
+        for step in [x for x in os.environ.get('SOFT_EXTRAS', '').split(',') if x]:
+            await getattr(self, f'extra_{step}')()
         return len(PAGES), len(PAGES)
+
+    async def extra_saver(self):
+        """The screensaver in Soft: the clock, the clock with its row, and a player's cover (run.py's saver steps)."""
+        import camera_feed
+        import media_art
+        import media_library
+        calls = []
+        self.client.subscribe_service_calls(calls.append)
+        ground = media_library.ground_colours(media_art.png(0)) or ''
+        row = [{'k': 'text', 't': '21°'}, {'k': 'text', 'i': 'F0335', 't': ''}, {'k': 'text', 'i': 'F140B', 't': '412 W'}]
+        steps = [('clock', {'k': 'clock'}), ('clock-row', {'k': 'clock', 'w': '21°', 'wi': row}),
+                 ('media', {'k': 'media', 'e': 'media_player.living_room', 'n': 'Living room', 't': 'Evening Drive',
+                            'x': {'artist': 'Nova Coast', 'album': 'Low Sun', 'pic': 'c0ffee1234', 'g': ground}})]
+        await self.call('render_standby', enter=1)
+        for name, message in steps:
+            start = len(calls)
+            await self.send({'v': 1, 'op': 'saver', **message})
+            end = time.monotonic() + 6
+            while name == 'media' and time.monotonic() < end:
+                ask = next((c for c in calls[start:] if c.service == 'esphome.screen_camera' and dict(c.data).get('saver')), None)
+                if ask:
+                    data = dict(ask.data)
+                    box = camera_feed.capped((480, 480))
+                    body = camera_feed.encode_saver(media_art.png(0, 640), box, 'media', int(ground.split(',')[0], 16) if ground else 0)
+                    url = self.pictures.url(f'{self.item.key}-saver.bmp', body)
+                    await self.send({'v': 1, 'op': 'camera', 't': 'saver', 'e': data['entity'], 'u': url, 'view': int(data['view'])})
+                    break
+                await asyncio.sleep(0.1)
+            await asyncio.sleep(2.0)
+            await self.render(f'x_saver_{name}', timeout=6)
+        await self.call('render_standby', enter=0)
+        await asyncio.sleep(1.0)
+
+    async def extra_settings(self):
+        """The screen's own settings page in Soft, and its first group."""
+        await self.call('open_settings', page=0)
+        await asyncio.sleep(1.2)
+        await self.render('x_settings', timeout=6)
+        await self.call('open_settings', page=1)
+        await asyncio.sleep(1.2)
+        await self.render('x_settings_1', timeout=6)
 
 
 

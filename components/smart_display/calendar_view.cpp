@@ -21,9 +21,10 @@ struct View {
 };
 
 // The board's fixed fonts, in calendar_card::Face's order.
+// Soft (local fork) writes them in its own faces: the words in the state's, the headings in the name's.
 static calendar_paint::Faces faces() {
-  return {rt::label_font, rt::small_font, rt::control_font, rt::watch_font, rt::watch_value_font, rt::clock_font,
-          rt::mini_icon_font, rt::tile_icon_font()};
+  return {rt::soft_bold(rt::label_font), rt::soft_text(rt::small_font), rt::soft_text(rt::control_font), rt::soft_bold(rt::watch_font),
+          rt::soft_bold(rt::watch_value_font), rt::soft_bold(rt::clock_font), rt::mini_icon_font, rt::tile_icon_font()};
 }
 static cc::Measure measure() {
   cc::Measure m;

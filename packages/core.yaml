@@ -2509,6 +2509,10 @@ script:
           // An alert is the one thing that outranks the settings page, so that closes first.
           settings_screen::close();
           const auto alert = screen_alert::make(title, subtitle, icon, color, button_text, timeout, flash, ${ALERT_TITLE_MAX}, ${ALERT_SUBTITLE_MAX}, ${ALERT_BUTTON_MAX}, button2_text, button_color, button2_color);
+          // Soft (local fork) writes the alert in its own faces; every other look keeps the board's (soft_bold, soft_text).
+          lv_obj_set_style_text_font(id(alert_title), runtime_tiles::soft_bold(id(headline)->get_lv_font()), 0);
+          lv_obj_set_style_text_font(id(alert_subtitle), runtime_tiles::soft_text(id(sublabel_big)->get_lv_font()), 0);
+          for (auto *key : {id(alert_ok_label), id(alert_button2_label)}) lv_obj_set_style_text_font(key, runtime_tiles::soft_bold(id(headline)->get_lv_font()), 0);
           // One button or two (firmware 0.3.3+), laid out before the hook, which lays the card out again for a picture.
           runtime_tiles::alert_two_buttons = !alert.button2.empty();
           lv_label_set_text(id(alert_button2_label), alert.button2.c_str());

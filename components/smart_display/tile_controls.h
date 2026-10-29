@@ -230,6 +230,11 @@ inline uint32_t lamp_color(int hue, int saturation) {
 inline uint32_t accent(const Tile &t) {
   using namespace theme::ha;
   const auto d = t.domain();
+  // Soft (local fork): one accent, its palette's, for what is on; a thermostat's modes, an alarm, a lock, the weather,
+  // the sun, a sensor and a vacuum in trouble keep Home Assistant's colours, which say something.
+  if (theme::soft && d != "climate" && d != "alarm_control_panel" && d != "lock" && d != "weather" && d != "sun" &&
+      d != "binary_sensor" && d != "sensor" && !(d == "vacuum" && t.state == "error"))
+    return theme::soft_colors().knob;
   if (d == "binary_sensor") return alarm_class(t.device_class) ? RED : AMBER;
   // An automation and a remote have no colour of their own in Home Assistant: on (or running, when a tap runs an
   // automation) is --state-active-color.
