@@ -147,6 +147,8 @@ PAGES = [
                  ('media_player.spotify', 'Plain', '', {'controls': 'volume_playback'}, 2, 0, 1, 3),
                  ('media_player.spotify', 'Plain wide', '', {'controls': 'playback'}, 0, 2, 2, 1)]),
     ('m_card', [('media_player.spotify', 'Spotify Tim Rousseau', '', {'controls': 'playback', 'display': 'cover'}, 0, 0, 2, 2)]),
+    ('m_full_none', [('media_player.spotify', 'Spotify Tim Rousseau', '', {'controls': 'none', 'subtitle': 'none'}, 0, 0, 3, 3)]),
+    ('m_full_keys', [('media_player.spotify', 'Spotify Tim Rousseau', '', {'controls': 'playback'}, 0, 0, 3, 3)]),
     ('m_full', [('media_player.spotify', 'Spotify', '', {'controls': 'volume_playback'}, 0, 0, 3, 3)]),
     ('c_media_full', [('media_player.sonos', 'Living room', '', {'controls': 'volume_playback'}, 0, 0, 3, 3)]),
     ('graph_full', [('sensor.graph', 'Outside temperature', '', GRAPH, 0, 0, 3, 3)]),

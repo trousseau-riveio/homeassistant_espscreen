@@ -230,21 +230,35 @@ inline Layout layout(const Metrics &m, int width, int height, int ends = 0) {
   return layout_with(m, width, height, ends, m.mute_h());
 }
 
-// The big cover (Soft, local fork): the cover as large as the glass, `width` × `height` from the glass's top left, with
-// the words, the bar, the keys and the volume row (its keys the size of shuffle and repeat) stacked along its foot over
-// a shade, as a phone's lock screen shows what plays. A tap on the cover switches between this and layout().
-inline Layout layout_cover(const Metrics &m, int width, int height, int ends = 0) {
+// Soft (local fork): the words, the bar, the keys and the volume row (its keys the size of shuffle and repeat) stacked
+// along the foot of `width` × `height`, the cover as large as the room over them leaves, in the middle. Without `keys`
+// or `volume` their rows are left out and the cover takes their room; a Metrics with no artist_h leaves its line out.
+inline Layout layout_soft(const Metrics &m, int width, int height, int ends, bool keys, bool volume) {
   Metrics bare = m;
   bare.art = false;  // the stack as a board without pictures lays it out, then moved to the foot
   Layout l = layout_with(bare, width, height, ends, m.mute_h());
   const int g = m.gap();
-  const int shift = std::max(0, (l.minus.y - g) - l.play.bottom());
+  const int floor = volume ? l.minus.y - g : height;
+  const int bottom = keys ? l.play.bottom() : std::max(l.bar.bottom(), l.times ? l.elapsed.bottom() : 0);
+  const int shift = floor - bottom;
   for (Rect *r : {&l.title, &l.artist_line, &l.bar, &l.elapsed, &l.total, &l.prev, &l.play, &l.next, &l.shuffle, &l.repeat, &l.seek})
     if (r->w || r->h) r->y += shift;
+  if (!m.artist_h) l.artist = false;
+  const int room = std::max(0, l.title.y - g);
+  const int side = m.art ? std::min({width, room, Metrics::cover_max()}) : 0;
+  l.art = side >= 32 ? Rect{(width - side) / 2, (room - side) / 2, side, side} : Rect{};
+  l.art_radius = radius_for(l.art.w);
+  return l;
+}
+// The big cover (Soft, local fork): the cover as large as the glass, `width` × `height` from the glass's top left, with
+// the rest of layout_soft stacked along its foot over a shade, as a phone's lock screen shows what plays. A tap on the
+// cover switches between this and the card's own layout.
+inline Layout layout_cover(const Metrics &m, int width, int height, int ends = 0) {
+  Layout l = layout_soft(m, width, height, ends, true, true);
   const int side = std::min({width, height, Metrics::cover_max()});
   l.art = {(width - side) / 2, 0, side, side};
   l.art_radius = radius_for(side);
-  const int top = std::max(0, l.title.y - 2 * g);
+  const int top = std::max(0, l.title.y - 2 * m.gap());
   l.shade = {0, top, width, height - top};
   return l;
 }

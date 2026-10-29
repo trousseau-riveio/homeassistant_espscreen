@@ -5526,7 +5526,7 @@ inline void render_media_detail(Tile &t,unsigned index,bool large,int width,int 
   const int foot=ui::px(large?12:6);
   if(big)top=0;
   const Layout l=big?layout_cover(m,width,height-foot,library+inputs)
-                 :soft_look?layout_with(m,width,std::max(60,height-top-foot),library+inputs,m.mute_h())
+                 :soft_look?layout_soft(m,width,std::max(60,height-top-foot),library+inputs,true,true)
                  :layout(m,width,std::max(60,height-top-foot),library+inputs);
   auto at=[&](Rect r){r.y+=top;return r;};
   const bool usable=fresh()&&t.available();
@@ -8043,9 +8043,26 @@ inline void render_media_full(Widgets &w,const Tile &t,bool big,int content_w,in
   using namespace media_card;
   using namespace tile_controls;
   const auto &x=t.extra();
-  const Metrics m=media_metrics(big,x.media_duration);
+  Metrics m=media_metrics(big,x.media_duration);
+  // Soft (local fork): no head (render_slot leaves it out), the words in the card's smaller faces, and the tile's
+  // options followed: Controls (the keys, the volume, both or none; a whole page has none unless chosen) and Second
+  // line (the artist and album, none, a text or a value). The cover takes what the rows leave (layout_soft).
+  const bool soft_look=theme::soft;
+  const lv_font_t *title_font=soft_look&&control_font?control_font:watch_font?watch_font:w.title_font;
+  const lv_font_t *artist_font=soft_look&&small_font?small_font:control_font?control_font:w.title_font;
+  const lv_font_t *small=small_font?small_font:w.title_font;
+  std::string line;
+  const bool line_chosen=soft_look&&chosen_subtitle(t,line);
+  const std::string kind=tile_controls::panel_kind(t);
+  const bool keys_on=!soft_look||tile_controls::is_key_row(kind);
+  const bool volume_on=!soft_look||kind=="volume"||tile_controls::media_volume_selected(t);
+  if(soft_look){
+    m.title_h=lv_font_get_line_height(title_font);
+    m.artist_h=line_chosen&&line.empty()?0:lv_font_get_line_height(artist_font);
+  }
   const int top=head_h+(ui::px(big?8:4));
-  const Layout l=layout(m,content_w,std::max(40,content_h-top-(ui::px(big?4:2))));
+  const int room_h=std::max(40,content_h-top-(ui::px(big?4:2)));
+  const Layout l=soft_look?layout_soft(m,content_w,room_h,0,keys_on,volume_on&&std::isfinite(t.volume)):layout(m,content_w,room_h);
   begin_extra(w,"media",content_w,content_h);
   auto at=[&](Rect r){r.y+=top;return r;};
   const bool usable=fresh()&&t.available(),track=usable&&has_track(t.state),play=media_card::playing(t.state);
@@ -8086,15 +8103,14 @@ inline void render_media_full(Widgets &w,const Tile &t,bool big,int content_w,in
       w.cover_shown.clear();w.cover_hold=0;
     }
   }
-  // Title, artist · album, left-aligned beside the cover, in the middle without one.
-  const lv_font_t *title_font=watch_font?watch_font:w.title_font,*artist_font=control_font?control_font:w.title_font,*small=small_font?small_font:w.title_font;
-  const lv_text_align_t words_align=m.art?LV_TEXT_ALIGN_LEFT:LV_TEXT_ALIGN_CENTER;
+  // Title, artist · album, left-aligned beside the cover, in the middle without one (and always in Soft's stack).
+  const lv_text_align_t words_align=m.art&&l.wide?LV_TEXT_ALIGN_LEFT:LV_TEXT_ALIGN_CENTER;
   auto text=[&](unsigned i,const lv_font_t *font,const Rect &r,lv_text_align_t align,const std::string &value,theme::Role role){
     auto *p=part_label(w,i,font,r.x,r.y+top,r.w,align,value);lv_label_set_long_mode(p,LV_LABEL_LONG_DOT);set_color(p,LV_STYLE_TEXT_COLOR,theme::color(role));lv_obj_remove_flag(p,LV_OBJ_FLAG_HIDDEN);return p;
   };
   // The title and the artist line roll by when they are too long (firmware 0.2.77+), as on the card.
   marquee(text(2,title_font,l.title,words_align,track&&!x.media_title.empty()?x.media_title:std::string(idle_text(usable?t.state:"unavailable")),theme::INK));
-  if(l.artist)marquee(text(3,artist_font,l.artist_line,words_align,track?subtitle(x.media_artist,x.media_album):std::string(),theme::MUTED));
+  if(l.artist)marquee(text(3,artist_font,l.artist_line,words_align,line_chosen?line:track?subtitle(x.media_artist,x.media_album):std::string(),theme::MUTED));
   else if(w.parts[3])lv_obj_add_flag(w.parts[3],LV_OBJ_FLAG_HIDDEN);
   // The progress bar and its times, wherever the keys are: at nought with 0:00 at both ends without a track or a length
   // (a stream, the moment between two tracks), as on the card (firmware 0.52.0; it went and came back before).
@@ -8105,7 +8121,7 @@ inline void render_media_full(Widgets &w,const Tile &t,bool big,int content_w,in
   if(barred){
     w.parts[4]=media_box(w.extra,w.parts[4],at(l.bar),theme::hex(theme::TRACK),LV_RADIUS_CIRCLE);lv_obj_remove_flag(w.parts[4],LV_OBJ_FLAG_HIDDEN);
     Rect fill=at(l.bar);fill.w=std::max(l.bar.h,timed?l.bar.w*std::max(0,progress(x.media_position,x.media_position_at,now_epoch(),play,x.media_duration))/1000:0);
-    w.parts[5]=media_box(w.extra,w.parts[5],fill,media_accent(),LV_RADIUS_CIRCLE);
+    w.parts[5]=media_box(w.extra,w.parts[5],fill,theme::soft?theme::soft_colors().knob:media_accent(),LV_RADIUS_CIRCLE);
     if(live)lv_obj_add_flag(w.parts[5],LV_OBJ_FLAG_HIDDEN);else lv_obj_remove_flag(w.parts[5],LV_OBJ_FLAG_HIDDEN);
   }else for(unsigned i:{4u,5u})if(w.parts[i])lv_obj_add_flag(w.parts[i],LV_OBJ_FLAG_HIDDEN);
   if(barred&&l.times){
@@ -8129,8 +8145,24 @@ inline void render_media_full(Widgets &w,const Tile &t,bool big,int content_w,in
     show(9,true);
   }
   show(8,!off);show(10,!off);
-  if(volume)media_volume_row(w.extra,&w.parts[11],at(l.minus),at(l.volume),at(l.plus),t,big,usable,(void*)(uintptr_t)w.index,false,key_font);
-  show(11,volume);show(12,volume);show(13,volume);
+  if(!keys_on)for(unsigned i:{8u,9u,10u})show(i,false);
+  // Soft's keys (local fork): play filled in the palette's accent, previous and next bare, as on Soft's smaller tiles.
+  if(soft_look){
+    const auto &colors=theme::soft_colors();
+    for(unsigned i:{8u,9u,10u}){
+      auto *k=w.parts[i];if(!k)continue;
+      auto *icon=lv_obj_get_child(k,0);
+      if(i==9){
+        set_color(k,LV_STYLE_BG_COLOR,lv_color_hex(colors.knob));set_color(k,LV_STYLE_BG_COLOR,lv_color_hex(theme::pressed(colors.knob)),LV_STATE_PRESSED);
+        set_number(k,LV_STYLE_BG_OPA,LV_OPA_COVER);if(icon)set_color(icon,LV_STYLE_TEXT_COLOR,theme::color(theme::ON_ACCENT));
+      }else{
+        set_number(k,LV_STYLE_BG_OPA,LV_OPA_TRANSP);set_color(k,LV_STYLE_BG_COLOR,lv_color_hex(colors.circle),LV_STATE_PRESSED);
+        if(icon)set_color(icon,LV_STYLE_TEXT_COLOR,lv_color_hex(colors.ink));
+      }
+    }
+  }
+  if(volume&&volume_on)media_volume_row(w.extra,&w.parts[11],at(l.minus),at(l.volume),at(l.plus),t,big,usable,(void*)(uintptr_t)w.index,false,key_font);
+  show(11,volume&&volume_on);show(12,volume&&volume_on);show(13,volume&&volume_on);
 }
 // A thermostat's mode bar (firmware 0.3.3): under its -/+ on a card of "Temperature and mode" (the tall card's parts
 // 2 and 4..9) and on its own as the panel of "Mode" (the panel's pill and segments, firmware 0.19.0). One bar, one
@@ -8804,6 +8836,9 @@ inline void render_full(Widgets &w,const Tile &t,bool custom,bool clock,bool sun
   head_h=std::max(head_h,std::max(head.circle_y+circle,head.value_y+value_h));
   if(media){
     hide_panel(w);lv_obj_add_flag(w.slider,LV_OBJ_FLAG_HIDDEN);
+    // Soft (local fork): the music alone, without the player's icon and name over it.
+    if(theme::soft){set_hidden(w.circle,true);set_hidden(w.title,true);set_hidden(w.value,true);head_h=0;}
+    else{set_hidden(w.circle,false);set_hidden(w.title,false);set_hidden(w.value,false);}
     render_media_full(w,t,big,content_w,content_h,head_h);
     return;
   }
