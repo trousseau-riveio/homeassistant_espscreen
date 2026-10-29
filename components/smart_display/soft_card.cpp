@@ -23,6 +23,14 @@ namespace runtime_tiles {
 //    of the player's says that instead;
 //  - Controls: the keys, the volume, both or none;
 //  - Icon: a chosen icon stands in the cover's place until the cover is here, the music note otherwise.
+// A line of Soft's player too long for its card rolls by, round and round (marquee, with the pause to read the start),
+// as the player's card rolls its title; one that fits stands still. Every other card keeps the dots (soft_card).
+static void roll(lv_obj_t *label,bool on){
+  if(on)marquee(label,true);
+  else if(lv_label_get_long_mode(label)!=LV_LABEL_LONG_DOT)lv_label_set_long_mode(label,LV_LABEL_LONG_DOT);
+}
+static int soft_progress_of(const Tile &t);
+static void soft_ring_draw(lv_event_t *e);
 static void soft_media(Widgets &w,const Tile &t,const SoftCard &c){
   w.soft_drawn=true;w.soft_watch=false;w.soft_media=true;
   hide_extra(w);lv_obj_add_flag(w.progress,LV_OBJ_FLAG_HIDDEN);set_hidden(w.unit,true);
@@ -135,12 +143,16 @@ static void soft_media(Widgets &w,const Tile &t,const SoftCard &c){
     label(w.title,title);
     lv_obj_set_pos(w.title,left,y);lv_obj_set_size(w.title,std::max(1,width),title_lines*name_h);
     set_text_align(w.title,centred?LV_TEXT_ALIGN_CENTER:LV_TEXT_ALIGN_LEFT);
+    // A title on one line that does not fit rolls; one on two lines wraps and ends in dots past the second.
+    roll(w.title,title_lines==1&&letters(title,name_face,size)>width);
     set_hidden(w.value,!with_artist);
     if(with_artist){
       lv_obj_set_pos(w.value,left,y+title_lines*name_h+line_gap);lv_obj_set_size(w.value,std::max(1,width),artist_h);
       set_text_align(w.value,centred?LV_TEXT_ALIGN_CENTER:LV_TEXT_ALIGN_LEFT);
-      fit_value(w.value,artist,"","",width);
-    }
+      const bool long_artist=letters(artist,artist_face,artist_size)>width;
+      roll(w.value,long_artist);
+      if(!long_artist)fit_value(w.value,artist,"","",width);
+    }else roll(w.value,false);
     return block();
   };
   label(w.value,artist);
@@ -148,14 +160,15 @@ static void soft_media(Widgets &w,const Tile &t,const SoftCard &c){
   auto volume_at=[&](int left,int top,int width,int height){
     lv_obj_align(w.slider,LV_ALIGN_TOP_LEFT,left,top);lv_obj_set_size(w.slider,width,height);
     lv_obj_set_ext_click_area(w.slider,slider_zone(w,height));slider_handle(w.slider,width,height);
-    lv_obj_remove_flag(w.slider,LV_OBJ_FLAG_HIDDEN);travel_look(w.slider,t,false,true);
+    set_number(w.slider,LV_STYLE_BG_OPA,LV_OPA_COVER,LV_PART_MAIN);lv_obj_remove_flag(w.slider,LV_OBJ_FLAG_HIDDEN);travel_look(w.slider,t,false,true);
     if(!lv_obj_has_state(w.slider,LV_STATE_PRESSED)&&lv_slider_get_value(w.slider)!=slider_value(t))lv_slider_set_value(w.slider,slider_value(t),LV_ANIM_OFF);
   };
   lv_obj_add_flag(w.slider,LV_OBJ_FLAG_HIDDEN);
   const int slider_h=std::clamp(key*60/100,ui::px(22),ui::px(40));
   auto cover=[&](int s,int left,int top){
     if(!art||s<ui::px(28)){set_hidden(w.circle,true);if(w.picture)lv_obj_add_flag(w.picture,LV_OBJ_FLAG_HIDDEN);return;}
-    soft_icon(w,t,s,top,left);set_number(w.circle,LV_STYLE_RADIUS,s/6);
+    // The cover's corners are the card's own (tile_ask asks the app for the same).
+    soft_icon(w,t,s,top,left);set_number(w.circle,LV_STYLE_RADIUS,std::min(s/2,static_cast<int>(lv_obj_get_style_radius(w.tile,LV_PART_MAIN))));
   };
   if(strip){
     const int s=art?ch:0;
@@ -227,6 +240,9 @@ static void soft_media(Widgets &w,const Tile &t,const SoftCard &c){
   }
   (void)keys_w;
   soft_media_paint(w);
+  // The track's border (soft_ring_draw), its draw event added once per card.
+  if(!w.soft_ring){lv_obj_add_event_cb(w.tile,soft_ring_draw,LV_EVENT_DRAW_POST,nullptr);w.soft_ring=true;}
+  w.soft_progress=static_cast<int16_t>(soft_progress_of(t));
 }
 // Soft's alarm and lock on a card two rows tall or more (local fork): what they guard, large. The shield or the lock in a
 // big circle in the middle of the card, the state under it in the name's largest face that fits and the name under
@@ -328,6 +344,71 @@ static void soft_guard(Widgets &w,const Tile &t,const SoftCard &c){
   lv_obj_set_pos(w.title,0,top+circle+gap+state_h+ui::px(2));lv_obj_set_size(w.title,cw,std::max(1,name_h));
   set_hidden(w.title,!name_h);
 }
+// Soft's player's border (local fork): how far the track has played, round the card's edge from the middle of its top,
+// clockwise, in the palette's accent over a faint track, a few pixels wide and as round at the corners as the card.
+// It is drawn over the card after everything in it (LV_EVENT_DRAW_POST), and moves on once a second
+// (soft_media_progress); a track without a length (a stream) and a player at rest show none.
+static int soft_progress_of(const Tile &t){
+  const auto &x=t.extra();
+  if(!media_track(t)||!x.media_duration)return -1;
+  return std::clamp(media_card::progress(x.media_position,x.media_position_at,now_epoch(),media_card::playing(t.state),x.media_duration),0,1000);
+}
+static Widgets *soft_ring_owner(lv_obj_t *tile){
+  for(auto &w:widgets)if(w.tile==tile)return &w;
+  for(auto *set:kept_sets)if(set)for(auto &w:*set)if(w.tile==tile)return &w;
+  return nullptr;
+}
+static int soft_ring_width(const lv_area_t &a){return std::clamp(static_cast<int>(std::min(lv_area_get_width(&a),lv_area_get_height(&a)))/40,ui::px(3),ui::px(6));}
+static void soft_ring_draw(lv_event_t *e){
+  auto *tile=static_cast<lv_obj_t *>(lv_event_get_current_target(e));
+  Widgets *w=soft_ring_owner(tile);
+  if(!w||!w->soft_media||w->soft_progress<0)return;
+  auto *layer=lv_event_get_layer(e);
+  lv_area_t a;lv_obj_get_coords(tile,&a);
+  const int stroke=soft_ring_width(a),inset=stroke/2;
+  const float x1=a.x1+inset,y1=a.y1+inset,x2=a.x2-inset,y2=a.y2-inset,cx=(a.x1+a.x2)/2.f;
+  const float r=std::clamp(static_cast<float>(lv_obj_get_style_radius(tile,LV_PART_MAIN))-inset,0.f,std::min(x2-x1,y2-y1)/2);
+  const float arc=r*3.14159265f/2;
+  struct Piece{bool round;float ax,ay,bx,by,cx,cy;int a0;float len;};
+  const Piece path[]={
+    {false,cx,y1,x2-r,y1,0,0,0,x2-r-cx},{true,0,0,0,0,x2-r,y1+r,270,arc},
+    {false,x2,y1+r,x2,y2-r,0,0,0,y2-y1-2*r},{true,0,0,0,0,x2-r,y2-r,0,arc},
+    {false,x2-r,y2,x1+r,y2,0,0,0,x2-x1-2*r},{true,0,0,0,0,x1+r,y2-r,90,arc},
+    {false,x1,y2-r,x1,y1+r,0,0,0,y2-y1-2*r},{true,0,0,0,0,x1+r,y1+r,180,arc},
+    {false,x1+r,y1,cx,y1,0,0,0,cx-x1-r}};
+  float total=0;for(auto &p:path)total+=std::max(0.f,p.len);
+  const auto &colors=theme::soft_colors();
+  auto draw=[&](float upto,uint32_t colour){
+    float left=upto;
+    for(auto &p:path){
+      if(left<=0||p.len<=0)break;
+      const float f=std::min(1.f,left/p.len);left-=p.len;
+      if(p.round){
+        lv_draw_arc_dsc_t d;lv_draw_arc_dsc_init(&d);
+        d.color=lv_color_hex(colour);d.width=stroke;d.rounded=0;
+        d.center.x=static_cast<int32_t>(std::lround(p.cx));d.center.y=static_cast<int32_t>(std::lround(p.cy));
+        d.radius=static_cast<uint16_t>(std::lround(r+stroke/2.f));
+        d.start_angle=p.a0;d.end_angle=p.a0+static_cast<int>(std::lround(90*f));
+        if(d.end_angle>d.start_angle)lv_draw_arc(layer,&d);
+      }else{
+        lv_draw_line_dsc_t d;lv_draw_line_dsc_init(&d);
+        d.color=lv_color_hex(colour);d.width=stroke;
+        d.p1.x=p.ax;d.p1.y=p.ay;d.p2.x=p.ax+(p.bx-p.ax)*f;d.p2.y=p.ay+(p.by-p.ay)*f;
+        lv_draw_line(layer,&d);
+      }
+    }
+  };
+  draw(total,theme::mix(colors.knob,colors.card,56));  // what is still to play: a pale tint of the accent
+  if(w->soft_progress>0)draw(total*w->soft_progress/1000.f,colors.knob);
+}
+// Where the track is now: the border is drawn again when it moved (about a pixel or more of the card's edge).
+void soft_media_progress(Widgets &w,const Tile &t){
+  if(!w.tile||!w.soft_media)return;
+  const int now=soft_progress_of(t);
+  if(now==w.soft_progress)return;
+  w.soft_progress=static_cast<int16_t>(now);
+  lv_obj_invalidate(w.tile);
+}
 // The player's keys in Soft's colours: play filled in the palette's accent whether it plays or rests, the thing a
 // finger looks for; previous and next bare, a circle under the finger only while pressed. Called after every layout
 // and after the palette pass (style_panel), which paints every card's keys alike.
@@ -350,6 +431,7 @@ void soft_media_paint(Widgets &w){
 }
 void soft_card(Widgets &w,const Tile &t,const SoftCard &c){
   w.soft_media=false;
+  roll(w.title,false);roll(w.value,false);  // the player's rolling lines (soft_media) end with it
   if(c.d=="media_player"&&!w.full&&!c.watch&&!c.graph&&!t.favorite()){soft_media(w,t,c);return;}
   if((c.d=="alarm_control_panel"||c.d=="lock")&&!c.watch&&!c.graph&&!t.stacked&&(t.row_span()>1||w.full)){soft_guard(w,t,c);return;}
   const std::string &d=c.d,&value=c.value,&unit=c.unit,&value_short=c.value_short,&value_tail=c.value_tail;
@@ -722,7 +804,8 @@ void soft_card(Widgets &w,const Tile &t,const SoftCard &c){
         second=second.empty()?word:word+" · "+second;word.clear();word_w=0;
         text_w=std::max(1,row_end-text_x);
       }
-      text_y=(head_h-title_height-line_gap-value_height)/2;
+      // The name on the circle's middle line alone (a lamp that is off); with its second line under it, the two together.
+      text_y=(head_h-title_height-(second.empty()?0:line_gap+value_height))/2;
     }else if(column){
       // The head: the circle, the name beside it on the circle's middle line with its second line under it.
       circle=head_circle;word.clear();
@@ -771,6 +854,8 @@ void soft_card(Widgets &w,const Tile &t,const SoftCard &c){
       if(standing)slider_handle_standing(w.slider,control_w,control_h);else slider_handle(w.slider,control_w,control_h);
       // A slider as wide as its card keeps the card's own corner rather than a pill's.
       if(column)for(auto part:{LV_PART_MAIN,LV_PART_INDICATOR})set_number(w.slider,LV_STYLE_RADIUS,ui::px(theme::SOFT_RADIUS)*2/3,part);
+      // The track in the circle's grey, solid: a lamp that is off keeps a whole grey slider rather than a faint shadow.
+      set_number(w.slider,LV_STYLE_BG_OPA,LV_OPA_COVER,LV_PART_MAIN);
       lv_obj_remove_flag(w.slider,LV_OBJ_FLAG_HIDDEN);
       travel_look(w.slider,t,false,true);
       if(!lv_obj_has_state(w.slider,LV_STATE_PRESSED) && lv_slider_get_value(w.slider)!=slider_value(t))lv_slider_set_value(w.slider,slider_value(t),LV_ANIM_OFF);

@@ -635,6 +635,10 @@ struct Widgets {
   // The card was last laid out by Soft: its own padding, letter spacing and slider place, given back when it is not.
   bool soft_drawn=false, soft_watch=false;  // soft_watch: drawn as Soft's big value
   bool soft_media=false;  // drawn as Soft's player (soft_card.cpp): its keys take their own paint
+  // Soft's player (local fork): how far the track is, per mille, which its border shows (-1: no track with a length),
+  // and whether the card draws that border (its draw event, added once).
+  int16_t soft_progress=-1;
+  bool soft_ring=false;
   lv_color_t panel_accent{}, panel_text{};
   // Busy sheet: a translucent white cover with a small spinner while a command is under way.
   lv_obj_t *busy{}, *spinner{}; bool busy_drawn=false;
@@ -8965,6 +8969,7 @@ struct SoftCard {
 };
 void soft_card(Widgets &w, const Tile &t, const SoftCard &c);
 void soft_media_paint(Widgets &w);
+void soft_media_progress(Widgets &w, const Tile &t);
 inline void render_slot(size_t slot) {
   swipe_profile::SlotTimer slot_timer(slot);
   swipe_profile::Lap lap;
@@ -9100,12 +9105,14 @@ inline void render_slot(size_t slot) {
                          !tile_controls::cover_tilt_selected(t) && !(w.full && d=="media_player") &&
                          !t.is_map() && !t.favorite();
   if(w.soft_drawn && !soft_layout){
+    // The Soft player's rolling lines (soft_card.cpp) take the dots back.
+    for(auto *o:{w.title,w.value})if(lv_label_get_long_mode(o)!=LV_LABEL_LONG_DOT)lv_label_set_long_mode(o,LV_LABEL_LONG_DOT);
     w.soft_drawn=w.soft_watch=w.soft_media=false;
     lv_obj_remove_local_style_prop(w.circle,LV_STYLE_RADIUS,LV_PART_MAIN);
     if(w.panel){end_panel(w);w.panel_mode.clear();}
     for(auto prop:{LV_STYLE_PAD_TOP,LV_STYLE_PAD_BOTTOM,LV_STYLE_PAD_LEFT,LV_STYLE_PAD_RIGHT})lv_obj_remove_local_style_prop(w.tile,prop,LV_PART_MAIN);
     for(auto *o:{w.title,w.value,w.unit})lv_obj_remove_local_style_prop(o,LV_STYLE_TEXT_LETTER_SPACE,LV_PART_MAIN);
-    lv_obj_align(w.slider,LV_ALIGN_BOTTOM_MID,0,0);
+    lv_obj_align(w.slider,LV_ALIGN_BOTTOM_MID,0,0);lv_obj_remove_local_style_prop(w.slider,LV_STYLE_BG_OPA,LV_PART_MAIN);  // Soft's solid track
     lv_obj_set_height(w.title,lv_font_get_line_height(lv_obj_get_style_text_font(w.title,LV_PART_MAIN)));
     if(lv_obj_get_style_text_font(w.icon,LV_PART_MAIN)!=w.icon_font)set_font(w.icon,w.icon_font);  // Soft's outline face
   }
@@ -11271,6 +11278,8 @@ inline void tick() {
       if(t.favorite()&&w.index<TILES_MAX&&favorite_started_at[w.index]&&!favorite_starting(w.index,t))card(w.index);
       // A media tile over the whole page: its bar runs on while the track plays (firmware 0.2.64+).
       if(w.extra_mode=="media" && w.extra && !lv_obj_has_flag(w.extra,LV_OBJ_FLAG_HIDDEN) && w.parts[5] && !lv_obj_has_flag(w.parts[5],LV_OBJ_FLAG_HIDDEN) && media_card::has_track(t.state))media_progress(t,w.parts[5],w.parts[6],w.media_bar_w);
+      // Soft's player (local fork): its border runs on with the track (soft_media_progress).
+      if(w.soft_media)soft_media_progress(w,t);
       // A cover kept while the next one was on its way, whose wait ran out: the card draws itself again without it. A
       // stream that just became one (media_live) draws it again with "Live".
       if(w.extra_mode=="media" && ((w.cover_hold && static_cast<int32_t>(esphome::millis()-w.cover_hold)>=0) || media_live(t)!=w.media_live))refresh_tile(w.index);
@@ -11744,7 +11753,8 @@ inline bool tile_ask(const Widgets &w, const Tile &t, tile_picture::Ask &a) {
   lv_obj_update_layout(place);
   const int width = lv_obj_get_width(place), height = lv_obj_get_height(place);
   if (width <= 0 || height <= 0) return false;
-  const int radius = art ? lv_obj_get_style_radius(w.tile, LV_PART_MAIN) : width / 6;
+  // Soft's player (local fork) rounds its cover as the card itself is rounded.
+  const int radius = art || w.soft_media ? lv_obj_get_style_radius(w.tile, LV_PART_MAIN) : width / 6;
   // Soft's cards (local fork) are its palette's paper: a cover's corners are cut over that.
   const uint32_t ground = t.transparent || art ? theme::hex(theme::PAGE) :
                           theme::soft && !t.background && !w.key ? theme::soft_colors().card : theme::surface(t.background);
