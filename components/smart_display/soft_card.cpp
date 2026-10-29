@@ -228,6 +228,102 @@ static void soft_media(Widgets &w,const Tile &t,const SoftCard &c){
   (void)keys_w;
   soft_media_paint(w);
 }
+// Soft's alarm and lock on a card two rows tall or more (local fork): what they guard, large. The shield or the lock in a
+// big circle in the middle of the card, the state under it in the name's largest face that fits and the name under
+// that; an alarm also has a row of round keys along the bottom for its modes, the one it is in filled in the accent.
+// A mode that needs a code opens the card on its keypad (alarm_choose); one that needs none is sent at once, as the
+// card's own keys do. A lock's card is its key: a tap locks or unlocks it, asking for a second tap where the tile says.
+constexpr int SOFT_ALARM_TOUCH=60000;  // the touch guard's ids of the mode keys: slot * 8 + mode
+// A mode key's event carries its slot; the key itself carries its mode (its user data), which changes with the panel.
+static void soft_alarm_key(lv_event_t *e){
+  const unsigned slot=(uintptr_t)lv_event_get_user_data(e);
+  const unsigned mode=(uintptr_t)lv_obj_get_user_data(lv_event_get_target_obj(e));
+  const unsigned code=slot*8+mode;
+  if(slot>=widgets.size()||!enabled||!fresh())return;
+  auto &w=widgets[slot];
+  if(w.index>=model.count)return;
+  auto &t=model.tiles[w.index];
+  if(t.domain()!="alarm_control_panel"||!t.available()||mode>=alarm_panel::MODE_COUNT)return;
+  if(!allowed(esphome::millis(),SOFT_ALARM_TOUCH+(int)code,"alarm mode "+std::to_string(slot)))return;
+  if(alarm_panel::needs_code(alarm_codes(t),mode)){active_index=w.index;show_detail(w.index);}
+  alarm_choose(t,mode);
+}
+static void soft_guard(Widgets &w,const Tile &t,const SoftCard &c){
+  w.soft_drawn=w.soft_watch=true;  // the state in ink, as Soft's big value
+  hide_panel(w);lv_obj_add_flag(w.progress,LV_OBJ_FLAG_HIDDEN);lv_obj_add_flag(w.slider,LV_OBJ_FLAG_HIDDEN);set_hidden(w.unit,true);
+  const int pad=std::clamp(std::min(tile_width(w),tile_height(w))*9/100,ui::px(12),ui::px(24));
+  for(auto prop:{LV_STYLE_PAD_TOP,LV_STYLE_PAD_BOTTOM,LV_STYLE_PAD_LEFT,LV_STYLE_PAD_RIGHT})set_number(w.tile,prop,pad);
+  const int cw=content_width(w),ch=content_height(w);
+  const int gap=std::max(ui::px(8),pad*2/3);
+  const auto &colors=theme::soft_colors();
+  // The alarm's modes: as many arming modes as the row holds beside Disarm, in Home Assistant's order.
+  std::vector<unsigned> keys;
+  int key=0,key_gap=ui::px(10);
+  if(c.d=="alarm_control_panel"&&t.available()&&fresh()){
+    key=std::clamp(std::min(cw,ch)*22/100,ui::touch_min(),ui::px(64));
+    const auto all=alarm_panel::modes(t.supported);
+    // Home, away and night at most beside Disarm: the modes a household uses; the card has the rest.
+    const int fit=std::min(4,std::max(0,(cw+key_gap)/(key+key_gap)));
+    if(fit>=2&&all.size()>=2){
+      for(unsigned m:all)if(m!=alarm_panel::DISARM&&static_cast<int>(keys.size())<fit-1)keys.push_back(m);
+      keys.push_back(alarm_panel::DISARM);
+    }
+  }
+  const int bottom=keys.empty()?ch:ch-key-gap;
+  if(!keys.empty()){
+    begin_extra(w,"soft_alarm",cw,ch);
+    const int row=static_cast<int>(keys.size())*key+(static_cast<int>(keys.size())-1)*key_gap;
+    const int now=alarm_panel::mode_of(t.state);
+    const size_t slot=&w-widgets.data();
+    for(size_t i=0;i<w.parts.size();++i){
+      auto *&k=w.parts[i];
+      if(i>=keys.size()){if(k)lv_obj_add_flag(k,LV_OBJ_FLAG_HIDDEN);continue;}
+      const unsigned mode=keys[i];
+      if(!k){
+        k=lv_obj_create(w.extra);lv_obj_remove_style_all(k);lv_obj_remove_flag(k,LV_OBJ_FLAG_SCROLLABLE);lv_obj_add_flag(k,LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_set_style_radius(k,LV_RADIUS_CIRCLE,0);lv_obj_set_style_bg_opa(k,LV_OPA_COVER,0);
+        auto *icon=lv_label_create(k);lv_obj_remove_flag(icon,LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_add_event_cb(k,soft_alarm_key,LV_EVENT_SHORT_CLICKED,(void*)(uintptr_t)slot);
+      }
+      lv_obj_set_user_data(k,(void*)(uintptr_t)mode);
+      lv_obj_remove_flag(k,LV_OBJ_FLAG_HIDDEN);
+      lv_obj_set_pos(k,(cw-row)/2+static_cast<int>(i)*(key+key_gap),ch-key);lv_obj_set_size(k,key,key);
+      lv_obj_set_ext_click_area(k,std::max(0,(ui::touch_min()-key)/2));
+      const bool on=static_cast<int>(mode)==now;
+      set_color(k,LV_STYLE_BG_COLOR,lv_color_hex(on?colors.knob:colors.circle));
+      set_color(k,LV_STYLE_BG_COLOR,lv_color_hex(on?theme::pressed(colors.knob):theme::hex(theme::KEY_PRESSED)),LV_STATE_PRESSED);
+      auto *icon=lv_obj_get_child(k,0);
+      const char *glyph=alarm_panel::MODES[mode].icon;
+      const lv_font_t *face=mini_icon_font&&font_has(mini_icon_font,glyph)?mini_icon_font:w.icon_font;
+      if(lv_obj_get_style_text_font(icon,LV_PART_MAIN)!=face)set_font(icon,face);
+      label(icon,glyph);set_color(icon,LV_STYLE_TEXT_COLOR,on?theme::color(theme::ON_ACCENT):lv_color_hex(colors.ink));
+      center_icon(icon);
+    }
+  }else hide_extra(w);
+  // The words: the state in the largest name face its width holds, the name a size smaller in the state's face.
+  const std::string &state=c.value;
+  const char *name_text=lv_label_get_text(w.title);
+  const auto names=soft_name_faces(),states=soft_state_faces();
+  int size=2;
+  while(size>0&&names[size]&&(text_width(state,names[size])+2*static_cast<int>(state.size())>cw||
+                              static_cast<int>(lv_font_get_line_height(names[size]))*5>bottom))--size;
+  const lv_font_t *state_face=names[size]?names[size]:w.value_font;
+  const lv_font_t *name_face=states[std::max(0,size-1)]?states[std::max(0,size-1)]:w.title_font;
+  for(auto *o:{w.title,w.value})set_number(o,LV_STYLE_TEXT_LETTER_SPACE,size==2?2:1);
+  set_font(w.value,state_face);set_font(w.title,name_face);
+  const int state_h=lv_font_get_line_height(state_face),name_h=name_text&&*name_text?lv_font_get_line_height(name_face):0;
+  const int words=state_h+(name_h?ui::px(2)+name_h:0);
+  // The circle: as large as the room over the words leaves, a lock's larger (it is the card's one key).
+  const int share=c.d=="lock"?60:56;
+  const int circle=std::clamp(std::min(cw,bottom-gap-words)*share/100,ui::px(40),ui::px(180));
+  const int block=circle+gap+words,top=std::max(0,(bottom-block)/2);
+  soft_icon(w,t,circle,top,(cw-circle)/2);
+  set_text_align(w.value,LV_TEXT_ALIGN_CENTER);set_text_align(w.title,LV_TEXT_ALIGN_CENTER);
+  lv_obj_set_pos(w.value,0,top+circle+gap);lv_obj_set_size(w.value,cw,state_h);
+  fit_value(w.value,state,c.value_short,c.value_tail,cw);set_hidden(w.value,false);
+  lv_obj_set_pos(w.title,0,top+circle+gap+state_h+ui::px(2));lv_obj_set_size(w.title,cw,std::max(1,name_h));
+  set_hidden(w.title,!name_h);
+}
 // The player's keys in Soft's colours: play filled in the palette's accent whether it plays or rests, the thing a
 // finger looks for; previous and next bare, a circle under the finger only while pressed. Called after every layout
 // and after the palette pass (style_panel), which paints every card's keys alike.
@@ -251,6 +347,7 @@ void soft_media_paint(Widgets &w){
 void soft_card(Widgets &w,const Tile &t,const SoftCard &c){
   w.soft_media=false;
   if(c.d=="media_player"&&!w.full&&!c.watch&&!c.graph&&!t.favorite()){soft_media(w,t,c);return;}
+  if((c.d=="alarm_control_panel"||c.d=="lock")&&!c.watch&&!c.graph&&!t.stacked&&(t.row_span()>1||w.full)){soft_guard(w,t,c);return;}
   const std::string &d=c.d,&value=c.value,&unit=c.unit,&value_short=c.value_short,&value_tail=c.value_tail;
   const bool with_panel=c.with_panel,mini=c.mini,large_tile=c.large_tile,watch=c.watch,graph=c.graph;
   int content_w=c.content_w,content_h=c.content_h;
