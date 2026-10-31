@@ -2314,6 +2314,8 @@
         "cover": "Copertina",
         "cover_hint": "La copertina di ciò che suona al posto dell'icona, come nel riquadro di Home Assistant; un lettore senza immagine mantiene la sua icona. Un tocco apre ancora la scheda.",
         "cover_needs_firmware": "La copertina sul riquadro richiede il firmware 0.2.78 o più recente: premi Aggiorna sullo schermo dopo il salvataggio.",
+        "backdrop": "Copertina di sfondo",
+        "backdrop_hint": "La copertina dell'album riempie tutto il riquadro e sfuma nel suo colore sotto il titolo, l'artista e i tasti. Un lettore senza immagine mantiene il riquadro semplice.",
         "map": "Mappa",
         "map_hint": "Dove si trovano questa persona e quelle che aggiungi, su una mappa tranquilla nei colori dello schermo. Home Assistant fornisce le strade di OpenStreetMap; lo schermo riceve solo l'immagine, mai una posizione. Viene ridisegnata quando qualcuno si sposta. Un tocco la apre a tutto schermo.",
         "map_needs_firmware": "Una mappa richiede il firmware 0.20.0 o successivo: premi Aggiorna sullo schermo dopo aver salvato.",

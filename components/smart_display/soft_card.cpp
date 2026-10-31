@@ -23,14 +23,58 @@ namespace runtime_tiles {
 //    of the player's says that instead;
 //  - Controls: the keys, the volume, both or none;
 //  - Icon: a chosen icon stands in the cover's place until the cover is here, the music note otherwise.
-// A line of Soft's player too long for its card rolls by, round and round (marquee, with the pause to read the start),
-// as the player's card rolls its title; one that fits stands still. Every other card keeps the dots (soft_card).
+// A line of Soft's player too long for its card rolls by on every size of card, round and round at an even pace with
+// no stop between the rounds (marquee, a second's wait before the first); one that fits stands still. The card's
+// refresh leaves a rolling line alone, so it never jumps back to its start while the music plays. Every other card
+// keeps the dots (soft_card).
 static void roll(lv_obj_t *label,bool on){
-  if(on)marquee(label,true);
+  if(on){
+    if(lv_label_get_long_mode(label)!=LV_LABEL_LONG_SCROLL_CIRCULAR){
+      static const lv_anim_t steady=[](){lv_anim_t a;lv_anim_init(&a);lv_anim_set_delay(&a,1000);lv_anim_set_repeat_delay(&a,0);lv_anim_set_repeat_count(&a,LV_ANIM_REPEAT_INFINITE);return a;}();
+      lv_obj_set_style_anim(label,&steady,0);
+      lv_obj_set_style_anim_duration(label,lv_anim_speed(ui::px(30)),0);
+    }
+    marquee(label);
+  }
   else if(lv_label_get_long_mode(label)!=LV_LABEL_LONG_DOT)lv_label_set_long_mode(label,LV_LABEL_LONG_DOT);
 }
 static int soft_progress_of(const Tile &t);
 static void soft_ring_draw(lv_event_t *e);
+// Cover background's veil: the card's colour over the whole card, clear over the top of the cover and fading in to almost
+// solid where the words begin, so the palette's ink reads on it as on any card; on a strip, from the side of the words.
+// Just over the picture (index 0, tile_picture_place), under everything else; the progress border draws over it all.
+static void veil_cover(Widgets &w,bool on,bool strip,int pad){
+  if(!on){if(w.soft_veil)lv_obj_add_flag(w.soft_veil,LV_OBJ_FLAG_HIDDEN);return;}
+  if(!w.soft_veil){
+    w.soft_veil=lv_obj_create(w.tile);lv_obj_remove_style_all(w.soft_veil);
+    lv_obj_remove_flag(w.soft_veil,LV_OBJ_FLAG_CLICKABLE);lv_obj_remove_flag(w.soft_veil,LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(w.soft_veil,LV_OBJ_FLAG_IGNORE_LAYOUT);
+  }
+  const bool photo=w.picture&&!lv_obj_has_flag(w.picture,LV_OBJ_FLAG_HIDDEN);
+  lv_obj_move_to_index(w.soft_veil,photo&&lv_obj_get_index(w.picture)==0?1:0);
+  const int tw=tile_width(w),th=tile_height(w);
+  lv_obj_set_pos(w.soft_veil,-pad,-pad);lv_obj_set_size(w.soft_veil,tw,th);
+  const lv_color_t card=lv_color_hex(theme::soft_colors().card);
+  set_color(w.soft_veil,LV_STYLE_BG_COLOR,card);set_color(w.soft_veil,LV_STYLE_BG_GRAD_COLOR,card);
+  set_number(w.soft_veil,LV_STYLE_BG_OPA,LV_OPA_COVER);
+  set_number(w.soft_veil,LV_STYLE_RADIUS,lv_obj_get_style_radius(w.tile,LV_PART_MAIN));
+  int from=0,to=255;
+  if(strip){
+    // A strip's words at its left: solid behind them, the cover clearing towards the keys.
+    set_number(w.soft_veil,LV_STYLE_BG_GRAD_DIR,LV_GRAD_DIR_HOR);
+    set_number(w.soft_veil,LV_STYLE_BG_MAIN_OPA,235);set_number(w.soft_veil,LV_STYLE_BG_GRAD_OPA,120);
+    from=150;to=255;
+  }else{
+    // Clear over the top of the cover, fading in over the last stretch above the words, almost solid where they begin.
+    set_number(w.soft_veil,LV_STYLE_BG_GRAD_DIR,LV_GRAD_DIR_VER);
+    set_number(w.soft_veil,LV_STYLE_BG_MAIN_OPA,LV_OPA_TRANSP);set_number(w.soft_veil,LV_STYLE_BG_GRAD_OPA,240);
+    const int words=pad+static_cast<int>(lv_obj_get_style_y(w.title,LV_PART_MAIN));
+    to=std::clamp(words*255/std::max(1,th),40,255);
+    from=std::clamp(to-std::max(45,to*35/100),0,to);
+  }
+  set_number(w.soft_veil,LV_STYLE_BG_MAIN_STOP,from);set_number(w.soft_veil,LV_STYLE_BG_GRAD_STOP,to);
+  lv_obj_remove_flag(w.soft_veil,LV_OBJ_FLAG_HIDDEN);
+}
 static void soft_media(Widgets &w,const Tile &t,const SoftCard &c){
   w.soft_drawn=true;w.soft_watch=false;w.soft_media=true;
   hide_extra(w);lv_obj_add_flag(w.progress,LV_OBJ_FLAG_HIDDEN);set_hidden(w.unit,true);
@@ -46,6 +90,9 @@ static void soft_media(Widgets &w,const Tile &t,const SoftCard &c){
   std::string chosen;
   if(chosen_subtitle(t,chosen))artist=chosen;
   const bool art=t.display=="cover";
+  // Cover background: the cover over the whole card (card_art), the words and the keys low on it, where the card's own
+  // colour has faded in over the picture (veil_cover, below).
+  const bool back=t.backdrop();
   // A note in the cover's place until the cover is here, and where there is none: never the player's own icon, unless
   // one was chosen for the tile.
   label(w.icon,t.icon.empty()?"\xF3\xB0\x8E\x87":t.icon.c_str());  // mdi:music-note
@@ -118,33 +165,42 @@ static void soft_media(Widgets &w,const Tile &t,const SoftCard &c){
     }
     return width;
   };
-  // The words: the title in the largest name face that its room calls for (two lines where `lines` allows and it needs
-  // them), the artist a size smaller under it; what does not fit goes, the artist first. Returns the block's height.
-  auto words=[&](int left,int top,int width,int height,int lines,bool centred,int target){
-    int size=0;
-    const auto names=soft_name_faces(),states=soft_state_faces();
-    for(int i=2;i>0;--i)if(names[i]&&static_cast<int>(lv_font_get_line_height(names[i]))*4<=target*5){size=i;break;}
+  // The name face that a room of `target` calls for, and the height of the words in it: the title and the artist.
+  const auto names=soft_name_faces(),states=soft_state_faces();
+  auto face_size=[&](int target){
+    for(int i=2;i>0;--i)if(names[i]&&static_cast<int>(lv_font_get_line_height(names[i]))*4<=target*5)return i;
+    return 0;
+  };
+  auto line_of=[&](const lv_font_t *f,const lv_font_t *fallback){return static_cast<int>(lv_font_get_line_height(f?f:fallback));};
+  auto words_height=[&](int size){
+    const int artist_h=line_of(states[std::max(0,size-1)],w.value_font);
+    return line_of(names[size],w.title_font)+(artist.empty()?0:std::max(ui::px(2),artist_h/5)+artist_h);
+  };
+  // The words: the title on one line in the largest name face that its room calls for (a size smaller where that makes
+  // it fit, else it rolls), the artist a size smaller under it; the artist goes only where the room is too low for it.
+  // Returns the block's height.
+  auto words=[&](int left,int top,int width,int height,bool centred,int target){
+    int size=face_size(target);
     auto letters=[&](const std::string &s,const lv_font_t *f,int i){return text_width(s,f)+(i==2?2:1)*static_cast<int>(s.size());};
-    // One line that does not fit steps the face down before it is cut; two lines take what one does not hold.
-    while(lines==1&&size>0&&names[size-1]&&letters(title,names[size],size)>width)--size;
+    if(size>0&&names[size-1]&&letters(title,names[size],size)>width&&letters(title,names[size-1],size-1)<=width)--size;
+    // A room too low for the title and the artist in this face steps it down before the artist goes.
+    while(size>0&&names[size-1]&&!artist.empty()&&words_height(size)>height)--size;
     const lv_font_t *name_face=names[size]?names[size]:w.title_font;
     const int artist_size=std::max(0,size-1);
     const lv_font_t *artist_face=states[artist_size]?states[artist_size]:w.value_font;
     const int name_h=lv_font_get_line_height(name_face),artist_h=lv_font_get_line_height(artist_face);
-    int title_lines=lines>1&&letters(title,name_face,size)>width?2:1;
+    const int title_lines=1;
     const int line_gap=std::max(ui::px(2),artist_h/5);
     bool with_artist=!artist.empty();
     auto block=[&]{return title_lines*name_h+(with_artist?line_gap+artist_h:0);};
     if(block()>height&&with_artist)with_artist=false;
-    if(block()>height&&title_lines>1)title_lines=1;
-    const int y=top+std::max(0,(height-block())/2);
+    const int y=top+std::max(0,back&&!strip?height-block():(height-block())/2);
     for(auto *o:{w.title,w.value})set_number(o,LV_STYLE_TEXT_LETTER_SPACE,size==2?2:1);
     set_font(w.title,name_face);set_font(w.value,artist_face);
     label(w.title,title);
     lv_obj_set_pos(w.title,left,y);lv_obj_set_size(w.title,std::max(1,width),title_lines*name_h);
     set_text_align(w.title,centred?LV_TEXT_ALIGN_CENTER:LV_TEXT_ALIGN_LEFT);
-    // A title on one line that does not fit rolls; one on two lines wraps and ends in dots past the second.
-    roll(w.title,title_lines==1&&letters(title,name_face,size)>width);
+    roll(w.title,letters(title,name_face,size)>width);
     set_hidden(w.value,!with_artist);
     if(with_artist){
       lv_obj_set_pos(w.value,left,y+title_lines*name_h+line_gap);lv_obj_set_size(w.value,std::max(1,width),artist_h);
@@ -166,7 +222,8 @@ static void soft_media(Widgets &w,const Tile &t,const SoftCard &c){
   lv_obj_add_flag(w.slider,LV_OBJ_FLAG_HIDDEN);
   const int slider_h=std::clamp(key*60/100,ui::px(22),ui::px(40));
   auto cover=[&](int s,int left,int top){
-    if(!art||s<ui::px(28)){set_hidden(w.circle,true);if(w.picture)lv_obj_add_flag(w.picture,LV_OBJ_FLAG_HIDDEN);return;}
+    // Cover background keeps its picture over the whole card (tile_picture_place); no square of its own.
+    if(!art||s<ui::px(28)){set_hidden(w.circle,true);if(w.picture&&!back)lv_obj_add_flag(w.picture,LV_OBJ_FLAG_HIDDEN);return;}
     // The cover's corners are the card's own (tile_ask asks the app for the same).
     soft_icon(w,t,s,top,left);set_number(w.circle,LV_STYLE_RADIUS,std::min(s/2,static_cast<int>(lv_obj_get_style_radius(w.tile,LV_PART_MAIN))));
   };
@@ -188,25 +245,30 @@ static void soft_media(Widgets &w,const Tile &t,const SoftCard &c){
       if(fit){keys_w=lay_keys(fit,0,ch/2,false,0);lv_obj_set_x(w.panel,cw-keys_w);right=cw-keys_w-gap;}
       else hide_panel(w);
     }
-    words(text_x,0,std::max(1,right-text_x),words_h,1,false,words_h<ch?words_h/2:ch/3);
+    // The words a size under the keys' weight: a quarter of the strip's height, not a third.
+    words(text_x,0,std::max(1,right-text_x),words_h,false,words_h<ch?words_h/2:ch/4);
   }else if(small){
     const int s=art?std::max(0,std::min(ch*50/100,cw-(count&&play>=0?finger+gap:0))):0;
     cover(s,0,0);
     if(count&&play>=0){lay_keys(1,0,s/2,false,0);lv_obj_set_x(w.panel,cw-finger);}
     else hide_panel(w);
     const int top=std::max(s,count&&play>=0?finger:0)+gap/2;
-    words(0,top,cw,ch-top,art?1:2,false,std::min(cw/7,(ch-top)/2));
+    words(0,top,cw,ch-top,false,std::min(cw/7,(ch-top)/2));
   }else if(landscape){
     const int s=art?std::min(ch,cw*45/100):0;
     cover(s,0,(ch-s)/2);
     const int left=s?s+gap:0,room=cw-left;
-    int bottom=ch;
+    // The words and the keys stand beside the cover, from its top to its bottom, where it is tall enough to hold them;
+    // without a cover (or beside a small one), the card's whole height.
+    const bool beside=s>=big+gap+ui::px(48);
+    const int top=beside?(ch-s)/2:0;
+    int bottom=beside?top+s:ch;
     if(count){
       const int fit=row_keys(room);
-      if(fit){lay_keys(fit,left,ch-big/2,true,room);bottom=ch-big-gap;}else hide_panel(w);
+      if(fit){lay_keys(fit,left,bottom-big/2,true,room);bottom-=big+gap;}else hide_panel(w);
     }
-    if(volume&&(!count||bottom-slider_h-gap>=ui::px(48))){volume_at(left,bottom-slider_h,room,slider_h);bottom-=slider_h+gap;}
-    words(left,0,room,std::max(1,bottom),2,false,std::min(room/7,ch/5));
+    if(volume&&(!count||bottom-top-slider_h-gap>=ui::px(48))){volume_at(left,bottom-slider_h,room,slider_h);bottom-=slider_h+gap;}
+    words(left,top,room,std::max(1,bottom-top),false,std::min(room/7,ch/5));
   }else if(standing){
     int bottom=ch;
     if(count){
@@ -215,13 +277,11 @@ static void soft_media(Widgets &w,const Tile &t,const SoftCard &c){
     }
     if(volume&&(!count||bottom-slider_h-gap>=ui::px(96))){volume_at(0,bottom-slider_h,cw,slider_h);bottom-=slider_h+gap;}
     // The words take what the cover leaves; the cover takes the width while the card is tall enough for both.
-    const auto names=soft_name_faces();
     const int target=std::min(cw/7,ch/9);
-    const int guess=2*std::max(ui::px(18),names[1]?static_cast<int>(lv_font_get_line_height(names[1])):ui::px(22))+ui::px(6);
-    const int s=art?std::max(0,std::min(cw,bottom-gap-guess)):0;
+    const int s=art?std::max(0,std::min(cw,bottom-gap-words_height(face_size(target)))):0;
     cover(s,(cw-s)/2,0);
     const int top=s>=ui::px(28)?s+gap:0;
-    words(0,top,cw,std::max(1,bottom-top),art?2:3,true,art?target:std::min(cw/6,ch/7));
+    words(0,top,cw,std::max(1,bottom-top),true,art?target:std::min(cw/6,ch/7));
   }else{
     // A square card: the cover at the top left, the words beside it, the volume and the keys along the bottom.
     int bottom=ch;
@@ -234,11 +294,12 @@ static void soft_media(Widgets &w,const Tile &t,const SoftCard &c){
     cover(s,0,0);
     const int left=s>=ui::px(28)?s+gap:0;
     // Without a cover the words take the room over the keys.
-    if(!s)words(0,0,cw,std::max(1,bottom-gap),3,false,std::min(cw/6,std::max(1,bottom-gap)/3));
-    else if(cw-left>=ui::px(80))words(left,0,cw-left,std::max(s,1),3,false,std::min((cw-left)/6,s/3));
-    else words(0,s+gap/2,cw,std::max(1,bottom-s-gap/2),1,false,std::min(cw/7,ch/6));
+    if(!s)words(0,0,cw,std::max(1,bottom-gap),false,std::min(cw/6,std::max(1,bottom-gap)/3));
+    else if(cw-left>=ui::px(80))words(left,0,cw-left,std::max(s,1),false,std::min((cw-left)/6,s/3));
+    else words(0,s+gap/2,cw,std::max(1,bottom-s-gap/2),false,std::min(cw/7,ch/6));
   }
   (void)keys_w;
+  veil_cover(w,back,strip,pad);
   soft_media_paint(w);
   // The track's border (soft_ring_draw), its draw event added once per card.
   if(!w.soft_ring){lv_obj_add_event_cb(w.tile,soft_ring_draw,LV_EVENT_DRAW_POST,nullptr);w.soft_ring=true;}
@@ -431,8 +492,9 @@ void soft_media_paint(Widgets &w){
 }
 void soft_card(Widgets &w,const Tile &t,const SoftCard &c){
   w.soft_media=false;
-  roll(w.title,false);roll(w.value,false);  // the player's rolling lines (soft_media) end with it
   if(c.d=="media_player"&&!w.full&&!c.watch&&!c.graph&&!t.favorite()){soft_media(w,t,c);return;}
+  roll(w.title,false);roll(w.value,false);  // the player's rolling lines (soft_media) end with it
+  veil_cover(w,false,false,0);
   if((c.d=="alarm_control_panel"||c.d=="lock")&&!c.watch&&!c.graph&&!t.stacked&&(t.row_span()>1||w.full)){soft_guard(w,t,c);return;}
   const std::string &d=c.d,&value=c.value,&unit=c.unit,&value_short=c.value_short,&value_tail=c.value_tail;
   // Soft's weather on a card larger than one cell is its big value (local fork): the temperature large, the

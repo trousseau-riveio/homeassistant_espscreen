@@ -1939,6 +1939,8 @@
         "cover": "Albumhoes",
         "cover_hint": "De albumhoes van wat er speelt op de plek van het icoon, zoals de eigen tile van Home Assistant; een speler zonder afbeelding houdt zijn icoon. Een tik opent nog steeds de kaart.",
         "cover_needs_firmware": "De albumhoes op de tile heeft firmware 0.2.78 of nieuwer nodig: druk na het opslaan op Bijwerken bij het scherm.",
+        "backdrop": "Hoes als achtergrond",
+        "backdrop_hint": "De albumhoes vult de hele tegel en loopt onder de titel, de artiest en de knoppen over in de kleur van de tegel. Een speler zonder afbeelding houdt de gewone tegel.",
         "map": "Kaart",
         "map_hint": "Waar deze persoon en de mensen die je toevoegt zijn, op een rustige kaart in de kleuren van het scherm. Home Assistant levert de straten van OpenStreetMap; het scherm krijgt alleen het plaatje, nooit een locatie. De kaart wordt opnieuw getekend als iemand zich verplaatst. Een tik opent hem over het hele scherm.",
         "map_needs_firmware": "Een kaart heeft firmware 0.20.0 of nieuwer nodig: druk na het opslaan op Bijwerken bij het scherm.",

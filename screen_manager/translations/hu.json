@@ -2314,6 +2314,8 @@
         "cover": "Albumborító",
         "cover_hint": "Az éppen szóló zene albumborítója az ikon helyén, mint a Home Assistant saját csempéjén; kép nélküli lejátszónál az ikon marad. Koppintásra továbbra is a kártya nyílik meg.",
         "cover_needs_firmware": "A csempén lévő albumborítóhoz 0.2.78 vagy újabb firmware kell: mentés után nyomd meg a Frissítés gombot a kijelzőnél.",
+        "backdrop": "Borító háttérként",
+        "backdrop_hint": "Az albumborító kitölti az egész csempét, és a cím, az előadó és a gombok alatt a csempe színébe olvad. A kép nélküli lejátszó megtartja az egyszerű csempét.",
         "map": "Térkép",
         "map_hint": "Hol van ez a személy és akiket hozzáadsz, egy nyugodt térképen a kijelző színeiben. Az utcákat a Home Assistant adja az OpenStreetMapből; a kijelző csak a képet kapja, soha nem helyet. Újrarajzolódik, ha valaki elmozdul. Egy érintés a teljes képernyőn nyitja meg.",
         "map_needs_firmware": "A térképhez 0.20.0 vagy újabb firmware kell: mentés után nyomd meg a Frissítés gombot a kijelzőnél.",

@@ -2314,6 +2314,8 @@
         "cover": "Carátula",
         "cover_hint": "La carátula de lo que suena en el lugar del icono, como en el propio mosaico de Home Assistant; un reproductor sin imagen conserva su icono. Un toque sigue abriendo la tarjeta.",
         "cover_needs_firmware": "La carátula en el mosaico necesita el firmware 0.2.78 o más reciente: pulsa Actualizar en la pantalla después de guardar.",
+        "backdrop": "Portada de fondo",
+        "backdrop_hint": "La portada del álbum llena todo el mosaico y se funde con su color bajo el título, el artista y los botones. Un reproductor sin imagen mantiene el mosaico sencillo.",
         "map": "Mapa",
         "map_hint": "Dónde están esta persona y las que añadas, en un mapa tranquilo con los colores de la pantalla. Home Assistant aporta las calles de OpenStreetMap; la pantalla solo recibe la imagen, nunca una ubicación. Se vuelve a dibujar cuando alguien se mueve. Un toque lo abre en toda la pantalla.",
         "map_needs_firmware": "Un mapa necesita el firmware 0.20.0 o posterior: pulsa Actualizar en la pantalla después de guardar.",

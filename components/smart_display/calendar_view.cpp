@@ -32,6 +32,7 @@ static cc::Measure measure() {
   for (int i = 0; i < cc::FACES; ++i) m.line[i] = f[i] ? lv_font_get_line_height(f[i]) : 0;
   m.width = [f](cc::Face face, const std::string &s) { return f[face] ? rt::text_width(s, f[face]) : 1 << 20; };
   m.circle = rt::cell_circle > 0 ? rt::cell_circle : ui::px(54);
+  m.stack = theme::soft;
   return m;
 }
 // The card's words in the screen's language: its own (screen.calendar) and the shared date and duration words.

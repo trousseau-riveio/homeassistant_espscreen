@@ -2314,6 +2314,8 @@
         "cover": "Okładka albumu",
         "cover_hint": "Okładka albumu tego, co gra, w miejscu ikony, jak na kafelku Home Assistant; odtwarzacz bez obrazu zachowuje ikonę. Dotknięcie nadal otwiera kartę.",
         "cover_needs_firmware": "Okładka albumu na kafelku wymaga firmware 0.2.78 lub nowszego: po zapisaniu naciśnij Aktualizuj przy ekranie.",
+        "backdrop": "Okładka w tle",
+        "backdrop_hint": "Okładka albumu wypełnia cały kafelek i przechodzi w jego kolor pod tytułem, wykonawcą i przyciskami. Odtwarzacz bez obrazu zachowuje zwykły kafelek.",
         "map": "Mapa",
         "map_hint": "Gdzie jest ta osoba i osoby, które dodasz, na spokojnej mapie w kolorach ekranu. Home Assistant dostarcza ulice z OpenStreetMap; ekran dostaje tylko obraz, nigdy lokalizację. Mapa jest rysowana od nowa, gdy ktoś się przemieści. Dotknięcie otwiera ją na cały ekran.",
         "map_needs_firmware": "Mapa wymaga oprogramowania 0.20.0 lub nowszego: po zapisaniu naciśnij Aktualizuj przy ekranie.",

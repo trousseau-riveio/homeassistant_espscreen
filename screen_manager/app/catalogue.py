@@ -198,7 +198,7 @@ def resolve_controls(tile, spans):
     keys = control_keys(domain)
     size = options.get('size')
     span = spans(size)
-    if not keys or options.get('display', 'standard') not in ('standard', 'cover') or options.get('inline') == 'slider':
+    if not keys or options.get('display', 'standard') not in ('standard', 'cover', 'backdrop') or options.get('inline') == 'slider':
         return None
     single = one_cell(size, spans)
     if single:

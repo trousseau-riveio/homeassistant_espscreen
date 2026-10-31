@@ -135,6 +135,8 @@ struct Measure {
   std::array<int, FACES> line{};
   std::function<int(Face, const std::string &)> width;
   int circle = 54;  // the board's icon circle (TILE_ICON_SIZE)
+  // Soft (local fork): a single card that is not wide stands its head (stacked_head) instead of laying it in a row.
+  bool stack = false;
 };
 inline int L(const Measure &m, Face f) { return m.line[f]; }
 inline bool large() { return ui::large(); }
@@ -333,6 +335,23 @@ inline void head(Pen &p, int x, int y, int w, int h, bool on, const std::string 
   p.text(tx, ty, tw, LABEL, Paint{INK}, first);
   // A second line that does not fit says its one essential thing whole ("Until 15:00") rather than cut ("Until 15:00 · 50...").
   p.text(tx, ty + L(m, LABEL) + gap, tw, SMALL, Paint{MUTED}, !brief.empty() && m.width(SMALL, second) > tw ? brief : second);
+}
+
+// Soft's head on a single card (local fork): the circle smaller at the top left, the two lines under it across the
+// card's whole width, so the event's name and its end are read whole rather than cut beside a large circle. Returns
+// where the lines end.
+inline int stacked_head(Pen &p, int x, int y, int w, int h, bool on, const std::string &first, const std::string &second,
+                        const std::string &brief, int below) {
+  const auto &m = p.m;
+  const int gap = head_gap(), lines = L(m, LABEL) + gap + L(m, SMALL), space = P(8, 4);
+  const int circle = std::clamp(h - below - lines - space, std::max(P(24, 16), L(m, ICON) + P(8, 4)), std::min(m.circle, P(40, 28)));
+  p.box(x, y, circle, circle, Paint{on ? ON_TINT : OFF_TINT}, circle / 2);
+  p.sc.texts.push_back({x, y + (circle - L(m, ICON)) / 2, circle, ICON, Paint{on ? ON_ICON : OFF_ICON}, CENTRE, on ? GLYPH_ON : GLYPH_OFF});
+  // The lines low in the card, over what goes under them (the bar), or right under the circle when the card is short.
+  const int ty = std::max(y + circle + space, y + h - below - lines);
+  p.text(x, ty, w, LABEL, Paint{INK}, first);
+  p.text(x, ty + L(m, LABEL) + gap, w, SMALL, Paint{MUTED}, !brief.empty() && m.width(SMALL, second) > w ? brief : second);
+  return ty + lines;
 }
 
 inline int module_pad() { return P(12, 6); }
@@ -933,6 +952,18 @@ inline View plan_tile(Scene &sc, const Measure &m, int w, int h, const Data &d, 
     default: {
       // Now: the head alone, with a thin bar of how far the event has come when a little room is left.
       const int bar = P(6, 4), room = hh + P(14, 6) + bar;
+      // Soft's single card that is not wide: the head stands, its bar along the bottom.
+      if (m.stack && w * 10 < h * 16 && h >= P(24, 16) + L(m, LABEL) + head_gap() + L(m, SMALL) + P(8, 4)) {
+        const bool running = s.now >= 0, with_bar = running && h >= P(24, 16) + L(m, LABEL) + head_gap() + L(m, SMALL) + P(8, 4) + P(10, 5) + bar;
+        stacked_head(p, 0, 0, w, h, hw.on, hw.first, hw.second, hw.brief, with_bar ? P(10, 5) + bar : 0);
+        if (with_bar) {
+          const auto &e = d.events[s.now];
+          const int done = std::clamp(1000 * (t.at() - e.start) / std::max(1, e.end - e.start), 0, 1000);
+          p.box(0, h - bar, w, bar, Paint{TRACK}, bar / 2);
+          p.box(0, h - bar, std::max(bar, w * done / 1000), bar, cal(CAL_KEY, e.cal), bar / 2);
+        }
+        break;
+      }
       if (s.now >= 0 && h >= room) {
         const int y0 = (h - room) / 2;
         head(p, 0, y0, w, hh, hw.on, hw.first, hw.second, hw.brief);

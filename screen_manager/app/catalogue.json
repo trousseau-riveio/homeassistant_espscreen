@@ -1393,6 +1393,16 @@
      }
     },
     {
+     "key": "backdrop",
+     "screen": {
+      "firmware": "0.57.0",
+      "pictures": true
+     },
+     "sizes": {
+      "full": false
+     }
+    },
+    {
      "key": "favorite",
      "needs": {
       "features": [

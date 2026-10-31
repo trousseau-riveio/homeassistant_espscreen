@@ -1939,6 +1939,8 @@
         "cover": "Album cover",
         "cover_hint": "The album cover of what plays in the icon's place, like Home Assistant's own tile; a player without a picture keeps its icon. A tap still opens the card.",
         "cover_needs_firmware": "The album cover on the tile needs firmware 0.2.78 or newer: press Update on the screen after saving.",
+        "backdrop": "Cover background",
+        "backdrop_hint": "The album cover fills the whole tile and fades into the tile's colour under the title, the artist and the keys. A player without a picture keeps the plain tile.",
         "map": "Map",
         "map_hint": "Where this person and the people you add are, on a calm map drawn in the screen's colours. Home Assistant supplies the streets from OpenStreetMap; the screen only gets the picture, never a location. It is drawn again when someone moves. A tap opens it over the whole screen.",
         "map_needs_firmware": "A map needs firmware 0.20.0 or newer: press Update on the screen after saving.",

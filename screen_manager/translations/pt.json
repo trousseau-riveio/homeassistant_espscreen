@@ -2314,6 +2314,8 @@
         "cover": "Capa do álbum",
         "cover_hint": "A capa do álbum do que está a tocar no lugar do ícone, como no próprio mosaico do Home Assistant; um leitor sem imagem mantém o seu ícone. Um toque continua a abrir o cartão.",
         "cover_needs_firmware": "A capa do álbum no mosaico precisa do firmware 0.2.78 ou mais recente: prima Atualizar no ecrã depois de guardar.",
+        "backdrop": "Capa de fundo",
+        "backdrop_hint": "A capa do álbum preenche todo o mosaico e funde-se com a sua cor por baixo do título, do artista e dos botões. Um leitor sem imagem mantém o mosaico simples.",
         "map": "Mapa",
         "map_hint": "Onde estão esta pessoa e as que adicionar, num mapa calmo nas cores do ecrã. O Home Assistant fornece as ruas do OpenStreetMap; o ecrã só recebe a imagem, nunca uma localização. É redesenhado quando alguém se move. Um toque abre-o em todo o ecrã.",
         "map_needs_firmware": "Um mapa precisa do firmware 0.20.0 ou mais recente: carregue em Atualizar no ecrã depois de guardar.",

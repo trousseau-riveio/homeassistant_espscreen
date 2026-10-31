@@ -3567,8 +3567,9 @@ class Manager:
         # A favourite (app 0.4.42) is the picture of what it plays, from its own saved choice.
         favored = lambda tile: (tile.get('options') or {}).get('display') == 'favorite' and camera_feed.cover_supported(tile['entity']) and \
             bool(((tile.get('options') or {}).get('play') or {}).get('thumb'))
-        pictured = lambda tile: mapped(tile) or favored(tile) or (tile.get('options') or {}).get('display') in ('live', 'cover') and \
-            ((tile.get('options') or {}).get('display') == 'cover') == camera_feed.cover_supported(tile['entity'])
+        # Cover background (local fork) is the same cover over the whole card.
+        pictured = lambda tile: mapped(tile) or favored(tile) or (tile.get('options') or {}).get('display') in ('live', 'cover', 'backdrop') and \
+            ((tile.get('options') or {}).get('display') in ('cover', 'backdrop')) == camera_feed.cover_supported(tile['entity'])
         tiles = {}
         for tile in placed_tiles:
             if pictured(tile):

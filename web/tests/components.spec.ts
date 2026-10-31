@@ -703,7 +703,7 @@ describe("TileInspector: a live picture on a camera tile (app 0.2.91)", () => {
     const tile: Tile = { entity: "media_player.sonos", name: "", slot: 0, options: { size: "wide" } };
     appendTiles(tile);
     const drawer = inspector(tile);
-    expect(choices(drawer, "Display")).toEqual(["Name and status", "Large value", "Album cover", "Favourite"]);
+    expect(choices(drawer, "Display")).toEqual(["Name and status", "Large value", "Album cover", "Cover background", "Favourite"]);
     await row(drawer, "Display").findAll(".seg button")[2].trigger("click");
     expect(current(tile).options).toEqual({ size: "wide", display: "cover" });
     expect(hint(row(drawer, "Display")).text).toMatch(/icon's place/);

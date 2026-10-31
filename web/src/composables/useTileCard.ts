@@ -174,7 +174,7 @@ export function useTileCard(props: TileCardProps) {
 
   // ---- Pictures: the add-on prepares them; source URLs and Home Assistant's credentials stay with it ----
   const loaded = reactive({ artwork: false, camera: false, favorite: false });
-  const artwork = computed(() => scr.pictures && face.value.tall && face.value.display === "cover" && domain.value === "media_player" && current.value?.a?.artwork_mark
+  const artwork = computed(() => scr.pictures && (face.value.tall && face.value.display === "cover" || face.value.display === "backdrop") && domain.value === "media_player" && current.value?.a?.artwork_mark
     ? `api/media-art?entity=${encodeURIComponent(props.tile.entity)}&v=${encodeURIComponent(String(current.value.a.artwork_mark))}` : "");
   // A live camera fills its card on every size (app 0.3.13; 1x2 and 2x2 since 0.3.8): the add-on's picture, cut the way
   // the tile asks, with the name at the bottom or nothing on it. Until the picture is here, the head as on the screen.

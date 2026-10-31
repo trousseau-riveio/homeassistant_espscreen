@@ -71,7 +71,7 @@ export const oneCell = (size: unknown) => size === undefined || size === null ||
  * stays whole on any card, a card of one cell included where it was chosen. */
 export function resolveControls(tile: { entity: string; options?: Record<string, any> }): string | null {
   const o = tile.options || {}, domain = tile.entity.split(".")[0], keys = controlKeys(domain), size = o.size, span = spanOf(size);
-  if (!keys.length || !["standard", "cover"].includes(o.display ?? "standard") || o.inline === "slider") return null;
+  if (!keys.length || !["standard", "cover", "backdrop"].includes(o.display ?? "standard") || o.inline === "slider") return null;
   if (oneCell(size)) {
     const choice: string = o.controls ?? "none";
     return choice !== "none" && controlOption(domain, choice)?.room ? choice : null;

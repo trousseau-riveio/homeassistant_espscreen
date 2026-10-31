@@ -534,7 +534,9 @@ struct Tile {
   bool live() const { const auto d = domain(); return display == "live" && (d == "camera" || d == "image"); }
   // A media player's album cover in the icon's place (firmware 0.2.78+): "display": "cover" on a single or double-width
   // tile, while the player has a picture; the tile over the whole page keeps the card's big cover.
-  bool cover_tile() const { return display == "cover" && domain() == "media_player" && !full && !extra().media_picture.empty(); }
+  // Cover background (local fork): the same cover over the whole card, Soft fading it into the card under the words.
+  bool cover_tile() const { return (display == "cover" || display == "backdrop") && domain() == "media_player" && !full && !extra().media_picture.empty(); }
+  bool backdrop() const { return display == "backdrop" && cover_tile(); }
   // A map of where this person and the people with them are (firmware 0.20.0+, app 0.4.33): the app draws the whole
   // card, its name included, and sends it in the page's strip like a live camera, so no map arithmetic lives here.
   // The map tile of the screen's own cards (firmware 0.21.0+) is the same picture, following whom the app is told to.

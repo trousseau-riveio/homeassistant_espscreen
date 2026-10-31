@@ -109,7 +109,7 @@ export function tileFace(input: FaceInput): Face {
   const coverRow = domain === "cover" && !full && shape.rows === 1 && options?.inline !== "slider" && ["standard", "cover"].includes(display)
     && Boolean(chosen) && (hasCoverTilt(chosen) || (shape.columns === 1 && ["position", "buttons"].includes(chosen || "")));
   const coverPrimaryKind = domain === "cover" ? availableControl(domain, coverPrimary(chosen) === "none" ? null : coverPrimary(chosen), state, a, input.rangeReady) : "";
-  const tall = shape.rows > 1 && (!full || coverExtended || climateModes) && ["standard", "cover"].includes(display);
+  const tall = shape.rows > 1 && (!full || coverExtended || climateModes) && ["standard", "cover", "backdrop"].includes(display);
   const goesTo = pageTarget(entity);
   const tallAction = tall && (entity === "screen.settings" || Boolean(goesTo));
   const controls = drawnControls(domain, chosen, live, shape.rows, input.rangeReady);

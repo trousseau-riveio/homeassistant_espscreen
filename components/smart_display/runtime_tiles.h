@@ -639,6 +639,7 @@ struct Widgets {
   // and whether the card draws that border (its draw event, added once).
   int16_t soft_progress=-1;
   bool soft_ring=false;
+  lv_obj_t *soft_veil=nullptr;  // Soft's cover background: the card's colour fading in over the cover, under the words
   lv_color_t panel_accent{}, panel_text{};
   // Busy sheet: a translucent white cover with a small spinner while a command is under way.
   lv_obj_t *busy{}, *spinner{}; bool busy_drawn=false;
@@ -798,8 +799,9 @@ inline bool tile_picture_marquee_ready(const Widgets &w, const Tile &t);
 // tile since 0.3.3, on every size since 0.3.7 (the small square in the icon's place said too little to be of use).
 // A map (firmware 0.20.0) fills its card on every size too, with its name drawn into the picture by the app.
 // A favourite (firmware 0.24.0+) fills its card with what it plays on every size, as a live camera does.
-// Soft's player (local fork) keeps its cover in its own rounded square, never over the whole card.
-inline bool card_art(const Tile &t) {return (t.row_span()>1 && !t.full && t.cover_tile() && !theme::soft) || t.live() || t.is_map() || (t.favorite() && t.pictured());}
+// Soft's player (local fork) keeps its cover in its own rounded square, or, set to Cover background, over the whole card
+// on every size, faded into the card under its words (soft_card.cpp).
+inline bool card_art(const Tile &t) {return (t.row_span()>1 && !t.full && t.cover_tile() && !theme::soft) || (theme::soft && t.backdrop()) || t.live() || t.is_map() || (t.favorite() && t.pictured());}
 // All icon fonts carry the same generated glyph set, so the first bound one answers for all.
 inline bool has_icon_glyph(uint32_t codepoint) {
   for (auto &w : widgets) if (w.icon_font) { lv_font_glyph_dsc_t dsc; return lv_font_get_glyph_dsc(w.icon_font, &dsc, codepoint, 0); }
@@ -9106,8 +9108,12 @@ inline void render_slot(size_t slot) {
                          !t.is_map() && !t.favorite();
   if(w.soft_drawn && !soft_layout){
     // The Soft player's rolling lines (soft_card.cpp) take the dots back.
-    for(auto *o:{w.title,w.value})if(lv_label_get_long_mode(o)!=LV_LABEL_LONG_DOT)lv_label_set_long_mode(o,LV_LABEL_LONG_DOT);
+    for(auto *o:{w.title,w.value}){
+      if(lv_label_get_long_mode(o)!=LV_LABEL_LONG_DOT)lv_label_set_long_mode(o,LV_LABEL_LONG_DOT);
+      lv_obj_remove_local_style_prop(o,LV_STYLE_ANIM,LV_PART_MAIN);lv_obj_remove_local_style_prop(o,LV_STYLE_ANIM_DURATION,LV_PART_MAIN);
+    }
     w.soft_drawn=w.soft_watch=w.soft_media=false;
+    if(w.soft_veil)lv_obj_add_flag(w.soft_veil,LV_OBJ_FLAG_HIDDEN);
     lv_obj_remove_local_style_prop(w.circle,LV_STYLE_RADIUS,LV_PART_MAIN);
     if(w.panel){end_panel(w);w.panel_mode.clear();}
     for(auto prop:{LV_STYLE_PAD_TOP,LV_STYLE_PAD_BOTTOM,LV_STYLE_PAD_LEFT,LV_STYLE_PAD_RIGHT})lv_obj_remove_local_style_prop(w.tile,prop,LV_PART_MAIN);
@@ -9463,7 +9469,7 @@ inline void render_slot(size_t slot) {
   const bool vision_card=theme::vision && !w.key && !t.background && !t.transparent && !(palette_state&8) && !letterboxed(w);
   const bool vision_lit=vision_card && available && t.active() && !t.builtin();
   // Soft (local fork): warm paper cards, a grey circle with a dark icon, the state green while the card is on.
-  const bool soft_card=theme::soft && !w.key && !t.background && !t.transparent && !(palette_state&8) && !letterboxed(w);
+  const bool soft_card=theme::soft && !w.key && !t.background && !t.transparent && (!(palette_state&8) || t.backdrop()) && !letterboxed(w);
   const uint32_t card_surface=soft_card?theme::soft_colors().card:vision_card?(vision_lit?theme::vision_lit(state_color):theme::VISION_GLASS):
                               glow_card?theme::tint(state_color,46):theme::surface(t.background);
   const bool soft_lit=soft_card && available && t.active() && !t.builtin();
@@ -11759,7 +11765,8 @@ inline bool tile_ask(const Widgets &w, const Tile &t, tile_picture::Ask &a) {
   const uint32_t ground = t.transparent || art ? theme::hex(theme::PAGE) :
                           theme::soft && !t.background && !w.key ? theme::soft_colors().card : theme::surface(t.background);
   // An album cover and a favourite carry their words on the picture, dimmed whole as a cover over a card is.
-  const int shade = art && (t.cover_tile() || t.favorite()) ? tile_picture::SHADE : 0;
+  // Soft's cover background (local fork) is not dimmed: the card fades it under the words itself.
+  const int shade = art && (t.cover_tile() || t.favorite()) && !(theme::soft && t.backdrop()) ? tile_picture::SHADE : 0;
   // A picture over the cap sits in the middle of its card on the dark of a camera's page, which its corners round over.
   a.frame = tile_picture::frame(width, height, radius, shade, ground, theme::hex(theme::CAMERA_PAGE), picture_cap());
   a.index = w.index;
@@ -11855,7 +11862,8 @@ inline void tile_picture_place(Widgets &w, const Tile &t, int size, int x, int y
       lv_obj_move_to_index(w.picture, 0);
       // The card behind a smaller picture: dark while it is smaller, the card's own colour again once it fills it.
       const bool dark = pw < width || ph < height;
-      set_color(w.tile, LV_STYLE_BG_COLOR, dark ? theme::color(theme::CAMERA_PAGE) : lv_color_hex(theme::surface(t.background)));
+      const uint32_t own = theme::soft && t.backdrop() && !t.background ? theme::soft_colors().card : theme::surface(t.background);
+      set_color(w.tile, LV_STYLE_BG_COLOR, dark ? theme::color(theme::CAMERA_PAGE) : lv_color_hex(own));
       set_number(w.tile, LV_STYLE_BG_OPA, t.transparent && !dark ? LV_OPA_TRANSP : LV_OPA_COVER);
     }
     lv_obj_remove_flag(w.picture, LV_OBJ_FLAG_HIDDEN);

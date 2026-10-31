@@ -109,7 +109,7 @@ export function coupledOptions(options: TileOptions = {}, key: string, value: un
   if (key === "display" && value === "watch") { out.inline = "none"; if (controlled) out.controls = "none"; }
   if (key === "inline" && value === "slider") { out.display = "standard"; if (controlled) out.controls = "none"; }
   if (key === "controls" && value === "none" && isTallSize(size)) out.inline = "none";
-  if (key === "controls" && value !== "none") { if (out.display !== "cover") out.display = "standard"; out.inline = "none"; }
+  if (key === "controls" && value !== "none") { if (out.display !== "cover" && out.display !== "backdrop") out.display = "standard"; out.inline = "none"; }
   // A map is the whole card: no small slider, no controls on it.
   if (key === "display" && (value === "map" || value === "favorite")) { delete out.inline; delete out.controls; }
   // Choosing an action is choosing Perform action.
@@ -205,6 +205,8 @@ export function displayChoices(tile: Tile, panel: TilePanel) {
     if (key === "meter") return !c || c.displays.includes("meter") || display === "meter";
     // The album cover on a media tile (app 0.2.92), on a board that draws pictures; the tile over the whole page has the card's big cover.
     if (key === "cover") return (panel.pictures || display === "cover") && size !== "full";
+    // Cover background (local fork): the same cover over the whole tile.
+    if (key === "backdrop") return (panel.pictures || display === "backdrop") && size !== "full";
     // A map (app 0.4.33) is a picture the add-on draws: only on a board that draws pictures.
     if (key === "map") return panel.pictures || display === "map";
     // A favourite (app 0.4.42): a player whose library Home Assistant browses; never the whole page, where the card is the player.
@@ -227,10 +229,11 @@ export function displayHint(tile: Tile, panel: TilePanel): Hint | null {
   else if (display === "favorite") text = t(supports(0, 24, 0) ? "editor.tile.display.favorite_hint" : "editor.tile.display.favorite_needs_firmware");
   else if (display === "cover" && taller) text = t("editor.tile.display.tall_cover_hint");
   else if (display === "cover") text = t(supports(0, 2, 78) ? "editor.tile.display.cover_hint" : "editor.tile.display.cover_needs_firmware");
+  else if (display === "backdrop") text = t("editor.tile.display.backdrop_hint");
   // The calm dial and the flip clock (firmware 0.3.6): an older screen shows the digital clock until it is updated.
   else if (clockFace(tile) && !supports(0, 3, 6)) text = t("editor.tile.display.face_needs_firmware");
   if (!text) return null;
-  const warn = !(display === "live" && filled) && !(display === "cover" && supports(0, 2, 78)) && !(display === "favorite" && supports(0, 24, 0))
+  const warn = !(display === "live" && filled) && !(display === "cover" && supports(0, 2, 78)) && display !== "backdrop" && !(display === "favorite" && supports(0, 24, 0))
     && !(display === "map" && supports(0, 20, 0)) && !(clockFace(tile) && supports(0, 3, 6));
   return { text, warn };
 }
@@ -278,7 +281,7 @@ export type Growth = { sets: string[]; suggested: string | null; drawn: string; 
  * at `after` with its options as they are. Null where the type has no controls or the face takes none (a watch, a slider). */
 export function growthOf(tile: Tile, panel: TilePanel, before: string, after: string): Growth | null {
   const domain = domainOf(tile), display = tileDisplay(tile);
-  if (!["standard", "cover"].includes(display) || option(tile, "inline", "none") === "slider") return null;
+  if (!["standard", "cover", "backdrop"].includes(display) || option(tile, "inline", "none") === "slider") return null;
   const sets = controlSets(tile, panel, after);
   if (!sets.length) return null;
   // A set someone chose is kept and added to; a tile that only ever had its type's default gets the richest set.
